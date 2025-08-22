@@ -21,8 +21,8 @@
    - Проверьте: "ffmpeg -version" в PowerShell. Если команда не найдена — установите FFmpeg и добавьте в PATH.
 2. Установите Python 3.11 (https://www.python.org/downloads/). Во время установки отметьте «Add Python to PATH».
 3. Создайте и активируйте виртуальное окружение на 3.11:
-   ```powershell
-   cd D:\Python\whisper_transcribe_api
+Зайти в директорию скрипта   
+```powershell
    py -3.11 -m venv .venv
    .\.venv\Scripts\activate
    ```
