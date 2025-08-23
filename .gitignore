@@ -32,6 +32,3 @@ uploads/
 # Build/Dist
 build/
 dist/
-
-# Release artifacts
-release/staging/

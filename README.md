@@ -62,80 +62,22 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 2) Нажмите «Создать задачу» — получите `task_id`.
 3) Нажмите «Проверять статус» — дождитесь `COMPLETED` и скачайте экспорт.
 
-### Полный список параметров Whisper
+## Настройки устройства и качество (CPU/GPU)
 
-- __WHISPER_DEVICE__ (string, default: `auto`)
-  - Допустимо: `auto|cuda|cpu`.
-  - При `auto` пробует CUDA, при ошибке — CPU.
-- __WHISPER_MODEL__ (string, default: `small`)
-  - Примеры: `tiny`, `base`, `small`, `medium`, `large-v3`, `large-v3-turbo`, а также варианты с суффиксом `.en`.
-- __WHISPER_COMPUTE_TYPE__ (string|null, default: зависит от устройства)
-  - Допустимо: `int8`, `int8_float16`, `float16`, `float32` (и другие совместимые режимы CTranslate2).
-  - По умолчанию: CUDA → `float16`, CPU → `int8`.
-- __WHISPER_LANGUAGE__ (string|null, default: null)
-  - ISO-код языка, напр. `ru`. Пусто/null → автоопределение.
-- __WHISPER_TASK__ (string, default: `transcribe`)
-  - Допустимо: `transcribe` или `translate` (перевод на английский).
-- __WHISPER_BEAM__ (int, default: 8)
-  - Ширина бим-поиска (>=1).
-- __WHISPER_PATIENCE__ (float, default: 1.0)
-  - Параметр раннего останова/поиска (>=0).
-- __WHISPER_LENGTH_PENALTY__ (float, default: 1.0)
-  - Штраф за длину гипотезы.
-- __WHISPER_CONDITION_PREV__ (bool, default: false)
-  - Учитывать предыдущий текст (context conditioning).
-- __WHISPER_VAD_MIN_SIL_MS__ (int, default: 300)
-  - Минимальная длительность тишины для VAD, мс (>=0).
-- __WHISPER_PROMPT__ (string|null, default: null)
-  - Начальная подсказка для стиля/лексики (например, список имён/терминов).
+Сервис использует faster‑whisper (`faster_whisper.WhisperModel`) и допускает выбор модели и типа вычислений. Ключевые переменные (см. `app/config.py`):
 
-Все параметры читаются из окружения/`.env` и из тела запроса `POST /api/v1/settings`. Применяются при следующей инициализации модели.
-
-#### Пример JSON payload для `POST /api/v1/settings`
-```json
-{
-  "WHISPER_DEVICE": "auto",
-  "WHISPER_MODEL": "large-v3-turbo",
-  "WHISPER_COMPUTE_TYPE": "float16",
-  "WHISPER_LANGUAGE": "ru",
-  "WHISPER_TASK": "transcribe",
-  "WHISPER_BEAM": 8,
-  "WHISPER_PATIENCE": 1.0,
-  "WHISPER_LENGTH_PENALTY": 1.0,
-  "WHISPER_CONDITION_PREV": false,
-  "WHISPER_VAD_MIN_SIL_MS": 300,
-  "WHISPER_PROMPT": null
-}
-```
-
-#### Примеры конфигураций через переменные окружения (Windows cmd)
-
-CPU, экономный режим:
-```bat
-set WHISPER_DEVICE=cpu
-set WHISPER_MODEL=small
-set WHISPER_COMPUTE_TYPE=int8
-```
-
-GPU (CUDA 12.x), FP16:
-```bat
-set WHISPER_DEVICE=cuda
-set WHISPER_MODEL=medium
-set WHISPER_COMPUTE_TYPE=float16
-```
-
-Турбо-модель:
-```bat
-set WHISPER_MODEL=large-v3-turbo
-```
-
-Перевод на английский (автоязык):
-```bat
-set WHISPER_TASK=translate
-set WHISPER_LANGUAGE=
-```
-
-> Подробности и дефолты смотрите в `app/config.py` и применении в `app/whisper_service.py`.
+- __WHISPER_DEVICE__: `auto|cuda|cpu` (по умолчанию `auto`). При `auto` выполняется попытка CUDA с фолбэком на CPU.
+- __WHISPER_MODEL__: имя модели Whisper, например `tiny|base|small|medium|large-v3` (и другие, поддерживаемые faster‑whisper/ctranslate2).
+- __WHISPER_COMPUTE_TYPE__: `int8|int8_float16|float16|float32|...`
+  - По умолчанию: для CUDA — `float16`, для CPU — `int8`.
+- __WHISPER_LANGUAGE__: ISO-код языка (например, `ru`), пусто ⇒ автоопределение.
+- __WHISPER_TASK__: `transcribe` (распознавание) или `translate` (перевод на английский).
+- __WHISPER_BEAM__: ширина бим‑поиска (целое, по умолчанию 8).
+- __WHISPER_PATIENCE__: параметр поиска (по умолчанию 1.0).
+- __WHISPER_LENGTH_PENALTY__: штраф за длину (по умолчанию 1.0).
+- __WHISPER_CONDITION_PREV__: учитывать предыдущий текст: `true|false` (по умолчанию `false`).
+- __WHISPER_VAD_MIN_SIL_MS__: минимальная тишина для VAD, мс (по умолчанию 300).
+- __WHISPER_PROMPT__: начальная подсказка (стиль/лексика, необязательно).
 
 ## API (кратко)
 
@@ -148,7 +90,7 @@ set WHISPER_LANGUAGE=
 - GET `/api/v1/tasks` → список задач (без результатов).
 - GET `/api/v1/tasks/{task_id}` → подробности задачи (включая `results` при готовности).
 - GET `/export/{task_id}.{fmt}` где `{fmt} = txt|srt|json` → экспорт результата.
-- GET `/api/v1/settings` / POST `/api/v1/settings` → чтение/применение настроек в рантайме с переинициализацией модели (см. раздел «Полный список параметров Whisper»).
+- GET `/api/v1/settings` / POST `/api/v1/settings` → чтение/применение настроек в рантайме с переинициализацией модели.
 - POST `/api/v1/reset` → очистка очереди и сброс модели.
 
 ### WebSocket: live‑статус
@@ -161,11 +103,28 @@ set WHISPER_LANGUAGE=
   - Для `COMPLETED`: присылается `results` (та же схема, что выше) и `progress=1.0`.
   - Для `FAILED`: присылается `error`.
 
+Мини‑пример клиента (JS):
+```js
+const ws = new WebSocket(`ws://${location.host}/ws/status/${taskId}`);
+ws.onmessage = (ev) => {
+  const data = JSON.parse(ev.data);
+  // data.status, data.progress, data.eta_seconds, data.results, data.error
+};
+```
+
+## Модели faster‑whisper
+
+- Поддерживаются стандартные имена моделей Whisper, например: `tiny`, `base`, `small`, `medium`, `large-v3`.
+- Указывайте нужную модель в `WHISPER_MODEL` или через UI. Сервис передает это имя в `WhisperModel(model_name, ...)` и скачивает/использует совместимую конверсию CTranslate2 автоматически.
+- Выбор `compute_type` влияет на производительность/память:
+  - GPU (CUDA 12.x): чаще всего `float16`.
+  - CPU: по умолчанию `int8` (наиболее экономично по памяти).
+
 ## Быстрый тест (PowerShell)
 
 1) Загрузка файла:
 ```powershell
-curl -F "file=@D:/Python/whisper_transcribe_api/uploads/audio.mp3" http://localhost:8000/api/v1/upload
+curl -F "file=@D:/path/to/audio.mp3" http://localhost:8000/api/v1/upload
 ```
 Скопируйте значение `stored_path` из ответа.
 
