@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-watchfiles
-pydantic
-pydantic-settings
-python-multipart
-faster-whisper
