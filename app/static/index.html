@@ -583,7 +583,6 @@
     async function pollOnce() {
       if (!currentTaskId || !isPolling) return;
       try {
-        // прерываем предыдущий запрос, если ещё идёт
         if (statusFetchController) {
           try { statusFetchController.abort(); } catch {}
         }
@@ -596,7 +595,6 @@
           show(workProgress, true);
           if (workProgress) workProgress.setAttribute('aria-hidden', 'false');
           show(workHint, true);
-          // Пробуем определить прогресс от сервера
           let p = null;
           if (typeof data.progress === 'number') p = data.progress; // может быть 0..1 или 0..100
           else if (typeof data.percent === 'number') p = data.percent;
@@ -609,7 +607,6 @@
             const etaTxt = (typeof data.eta_seconds === 'number') ? `, ETA: ${fmtETA(data.eta_seconds)}` : '';
             statusText.textContent = `статус: ${data.status}, ${Math.round(pct)}%${etaTxt}`;
           } else {
-            // нет данных о прогрессе — показываем индетерминант
             workProgress.classList.add('indeterminate');
             if (workProgress) {
               workProgress.removeAttribute('aria-valuenow');
@@ -624,18 +621,17 @@
           if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
           workProgress.classList.add('indeterminate');
           setWorkProgress(0);
-          renderExportLinks(currentTaskId);
-          statusText.textContent = 'статус: COMPLETED, 100%';
-          const phrases = data.results?.phrases || [];
-          renderPhrasesTable(phrases);
-          // Дополнительно (опционально) текстовый бокс
-          if (phrases.length) {
-            resultBox.style.display = 'block';
-            resultBox.textContent = phrases.map(p => `${String(p.text || '')}`).join('\n');
-          } else {
-            resultBox.style.display = 'none';
-            resultBox.textContent = '';
+          const results = data.results || null;
+          if (results) {
+            const raw = Array.isArray(results.phrases) ? results.phrases : (Array.isArray(results.segments) ? results.segments : []);
+            const segs = raw.map(s => ({ start: s.start, end: s.end, text: s.text }));
+            renderPhrasesTable(segs);
+            resultBox.style.display = '';
+            const plainText = results.text != null ? String(results.text) : segs.map(s => s.text).join('\n');
+            resultBox.textContent = (plainText || '').trim();
+            renderExportLinks(currentTaskId);
           }
+          statusText.textContent = 'статус: COMPLETED, 100%';
         } else if (data.status === 'FAILED') {
           clearInterval(pollTimer); pollTimer = null; isPolling = false;
           stopPollBtn.disabled = true; pollBtn.disabled = false;
@@ -650,7 +646,6 @@
         }
       } catch (e) {
         if (e && (e.name === 'AbortError' || String(e.message || '').toLowerCase().includes('abort'))) {
-          // намеренно прерванный запрос — тихо выходим
           return;
         }
         console.error(e);
@@ -707,7 +702,6 @@
         taskId.textContent = currentTaskId;
         pollBtn.disabled = false;
         taskInfo.textContent = 'Задача создана';
-        // Очистим старые результаты
         resultBox.style.display = 'none';
         resultBox.textContent = '';
         clearPhrasesTable();
@@ -852,7 +846,6 @@
     async function fetchUploads() {
       try {
         const res = await fetch('/api/v1/uploads');
-        if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         const files = Array.isArray(data.files) ? data.files : [];
         uploadedSelect.innerHTML = '';

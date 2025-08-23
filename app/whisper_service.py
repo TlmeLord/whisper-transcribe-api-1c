@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from faster_whisper import WhisperModel
 
 from .queue import queue_manager, Task  # для обновления прогресса
+from .config import get_settings as get_app_settings
 
 _model: Optional[WhisperModel] = None
 _device_mode: Optional[str] = None  # 'cuda' | 'cpu'
@@ -25,13 +26,14 @@ def _init_model(prefer: str) -> WhisperModel:
     - WHISPER_COMPUTE_TYPE: int8|int8_float16|float16|int8_float32 ... (по умолчанию зависит от устройства)
     """
     prefer = (prefer or "auto").lower()
-    model_name = _get_env("WHISPER_MODEL", "small")
-    compute_type_env = os.getenv("WHISPER_COMPUTE_TYPE")
+    settings = get_app_settings()
+    model_name = settings.WHISPER_MODEL or "small"
+    compute_type_cfg = settings.WHISPER_COMPUTE_TYPE
 
     def build(device: str) -> WhisperModel:
         # Выбираем compute_type: для CUDA по умолчанию float16, для CPU — int8
-        if compute_type_env:
-            ct = compute_type_env
+        if compute_type_cfg:
+            ct = compute_type_cfg
         else:
             ct = "float16" if device == "cuda" else "int8"
         return WhisperModel(model_name, device=device, compute_type=ct)
@@ -49,16 +51,17 @@ def _init_model(prefer: str) -> WhisperModel:
 
 def get_model() -> WhisperModel:
     """
-    Возвращает экземпляр модели Whisper с учётом переменной окружения WHISPER_DEVICE (auto|cuda|cpu).
+    Возвращает экземпляр модели Whisper с учётом настроек (auto|cuda|cpu).
     Дополнительно читаются WHISPER_MODEL, WHISPER_COMPUTE_TYPE.
     """
     global _model, _device_mode
     if _model is None:
-        prefer = _get_env("WHISPER_DEVICE", "auto").lower()
+        prefer = (get_app_settings().WHISPER_DEVICE or "auto").lower()
         try:
             _model = _init_model(prefer)
         except Exception:
-            _model = WhisperModel(_get_env("WHISPER_MODEL", "small"), device="cpu", compute_type=_get_env("WHISPER_COMPUTE_TYPE", "int8"))
+            s = get_app_settings()
+            _model = WhisperModel(s.WHISPER_MODEL or "small", device="cpu", compute_type=(s.WHISPER_COMPUTE_TYPE or "int8"))
         try:
             _device_mode = "cuda" if prefer == "cuda" else prefer
         except Exception:
@@ -68,7 +71,8 @@ def get_model() -> WhisperModel:
 
 def _force_cpu_model() -> WhisperModel:
     global _model, _device_mode
-    _model = WhisperModel(_get_env("WHISPER_MODEL", "small"), device="cpu", compute_type=_get_env("WHISPER_COMPUTE_TYPE", "int8"))
+    s = get_app_settings()
+    _model = WhisperModel(s.WHISPER_MODEL or "small", device="cpu", compute_type=(s.WHISPER_COMPUTE_TYPE or "int8"))
     _device_mode = "cpu"
     return _model
 
@@ -113,14 +117,15 @@ def _transcribe_blocking(task: Task) -> Dict:
 
 def _do_transcribe(model: WhisperModel, task: Task) -> Dict:
     file_path = task.file_path
-    # Параметры распознавания из окружения
-    language = os.getenv("WHISPER_LANGUAGE")  # например, "ru" для фиксированного русского
-    task_mode = _get_env("WHISPER_TASK", "transcribe")  # или "translate"
-    beam_size = int(_get_env("WHISPER_BEAM", "8"))
-    patience = float(_get_env("WHISPER_PATIENCE", "1.0"))
-    length_penalty = float(_get_env("WHISPER_LENGTH_PENALTY", "1.0"))
-    condition_prev = _get_env("WHISPER_CONDITION_PREV", "false").lower() == "true"
-    initial_prompt = os.getenv("WHISPER_PROMPT")  # подсказка стилю/лексике, можно на русском
+    # Параметры распознавания из типизированных настроек
+    s = get_app_settings()
+    language = s.WHISPER_LANGUAGE  # например, "ru" для фиксированного русского (None => autodetect)
+    task_mode = (s.WHISPER_TASK or "transcribe")
+    beam_size = int(s.WHISPER_BEAM or 8)
+    patience = float(s.WHISPER_PATIENCE or 1.0)
+    length_penalty = float(s.WHISPER_LENGTH_PENALTY or 1.0)
+    condition_prev = bool(s.WHISPER_CONDITION_PREV)
+    initial_prompt = s.WHISPER_PROMPT  # подсказка стилю/лексике, можно на русском
 
     segments, info = model.transcribe(
         file_path,
@@ -130,7 +135,7 @@ def _do_transcribe(model: WhisperModel, task: Task) -> Dict:
         patience=patience,
         length_penalty=length_penalty,
         vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": int(_get_env("WHISPER_VAD_MIN_SIL_MS", "300"))},
+        vad_parameters={"min_silence_duration_ms": int(s.WHISPER_VAD_MIN_SIL_MS or 300)},
         condition_on_previous_text=condition_prev,
         initial_prompt=initial_prompt,
     )

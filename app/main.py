@@ -1,16 +1,19 @@
 import os
 import shutil
+import asyncio
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .schemas import CreateTaskRequest, TaskStatusResponse, UploadResponse, TaskStatus, TaskResult, TaskSummary, TaskDetail
 from .queue import queue_manager, Task
 from .whisper_service import transcribe, reset_model
+from .config import get_settings as get_app_settings, reload_settings
 
 # Корневая директория приложения и каталог для загрузок
 APP_ROOT = Path(os.getenv("APP_ROOT", Path(__file__).resolve().parents[1]))
@@ -29,6 +32,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Сжатие ответов (GZip)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Раздача статики и простая страница UI
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -207,33 +213,28 @@ async def export_result(task_id: str, fmt: str):
     raise HTTPException(status_code=400, detail="Неподдерживаемый формат. Используйте txt|srt|json")
 
 
-# Простые настройки через переменные окружения (runtime)
+# Типизированные настройки (runtime)
 @app.get("/api/v1/settings")
-async def get_settings():
-    keys = [
-        "WHISPER_DEVICE", "WHISPER_MODEL", "WHISPER_COMPUTE_TYPE",
-        "WHISPER_LANGUAGE", "WHISPER_TASK", "WHISPER_BEAM", "WHISPER_PATIENCE",
-        "WHISPER_LENGTH_PENALTY", "WHISPER_CONDITION_PREV", "WHISPER_VAD_MIN_SIL_MS",
-        "WHISPER_PROMPT",
-    ]
-    return {k: os.getenv(k) for k in keys}
+async def get_settings_handler():
+    return get_app_settings().model_dump()
 
 
 @app.post("/api/v1/settings")
 async def set_settings(payload: dict):
-    # Устанавливаем переменные окружения, null/"" удаляет ключ
-    changed = {}
+    # Применение настроек
+    changed: dict[str, Optional[str]] = {}
     for k, v in payload.items():
         if v is None or v == "":
             if k in os.environ:
                 del os.environ[k]
-                changed[k] = None
+            changed[k] = None
         else:
             os.environ[k] = str(v)
             changed[k] = os.environ[k]
-    # Сброс модели, чтобы новые настройки применились
+    # Перечитывает настройки и сбрасываем модель
+    reload_settings()
     reset_model()
-    return {"updated": changed}
+    return {"updated": changed, "effective": get_app_settings().model_dump()}
 
 
 @app.post("/api/v1/reset")
@@ -303,3 +304,43 @@ async def get_task_detail(task_id: str):
         error=t.error,
     )
     return detail
+
+
+# WebSocket поток статуса задачи
+@app.websocket("/ws/status/{task_id}")
+async def ws_status(websocket: WebSocket, task_id: str):
+    await websocket.accept()
+    try:
+        while True:
+            t = queue_manager.get_task(task_id)
+            if not t:
+                await websocket.send_json({"error": "Задача не найдена", "task_id": task_id})
+                await asyncio.sleep(1.0)
+                continue
+
+            resp = {
+                "task_id": t.id,
+                "status": t.status,
+            }
+            if t.status == TaskStatus.PENDING:
+                pos = queue_manager.queue_position(t.id)
+                resp["queue_position"] = pos if pos is not None else 0
+            elif t.status == TaskStatus.IN_PROGRESS:
+                resp["progress"] = t.progress
+                resp["eta_seconds"] = t.eta_seconds
+            elif t.status == TaskStatus.COMPLETED:
+                try:
+                    resp["results"] = TaskResult.model_validate(t.result).model_dump() if t.result else None
+                except Exception:
+                    resp["results"] = t.result
+                resp["progress"] = 1.0
+                resp["eta_seconds"] = 0.0
+            elif t.status == TaskStatus.FAILED:
+                resp["error"] = t.error or "Неизвестная ошибка"
+
+            await websocket.send_json(resp)
+            if t.status in {TaskStatus.COMPLETED, TaskStatus.FAILED}:
+                break
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        return
