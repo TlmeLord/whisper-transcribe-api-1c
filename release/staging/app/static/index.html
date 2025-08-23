@@ -1,0 +1,892 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Whisper Transcribe UI</title>
+  <style>
+    /* Палитры тем */
+    :root {
+      --bg: #ffffff;
+      --fg: #111827;
+      --muted: #6b7280;
+      --primary: #111827;
+      --border: #e5e7eb;
+      --accent: #3730a3;
+      --accent-weak: #eef2ff;
+      --success: #16a34a;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --panel: #ffffff;
+      --code-bg: #0b1021;
+      --link: #2563eb;
+      --surface: #f8fafc;
+      --progress-bg: #f1f5f9;
+      --shadow: 0 1px 2px rgba(0,0,0,0.06);
+      --btn-bg: #111827;
+      --btn-fg: #ffffff;
+      --btn-hover-bg: #0f172a;
+      --btn-border: transparent;
+      --btn-ghost-fg: #111827;
+      --btn-ghost-hover-bg: rgba(17,24,39,0.06);
+      --btn-disabled-bg: #e5e7eb;
+      --btn-disabled-fg: #6b7280;
+    }
+    :root[data-theme="dark"] {
+      --bg: #0b1220;
+      --fg: #e5e7eb;
+      --muted: #9aa3b2;
+      --primary: #e5e7eb;
+      --border: #1f2937;
+      --accent: #a78bfa;
+      --accent-weak: #1f2542;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --panel: #0f172a;
+      --code-bg: #0b1021;
+      --link: #60a5fa;
+      --surface: #0f172a;
+      --progress-bg: #111827;
+      --shadow: 0 1px 2px rgba(0,0,0,0.25);
+      --btn-bg: #6366f1;          /* indigo-500 */
+      --btn-fg: #ffffff;
+      --btn-hover-bg: #4f46e5;    /* indigo-600 */
+      --btn-border: transparent;
+      --btn-ghost-fg: #e5e7eb;
+      --btn-ghost-hover-bg: rgba(255,255,255,0.08);
+      --btn-disabled-bg: #374151; /* gray-700 */
+      --btn-disabled-fg: #9aa3b2; /* muted */
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 24px;
+      color: var(--fg);
+      background: var(--bg);
+      transition: background-color .25s ease, color .25s ease;
+    }
+    h1 { margin: 0 0 8px; }
+    .badge { display:inline-block; padding:2px 6px; border-radius:999px; background:var(--accent-weak); color:var(--accent); font-size:12px; }
+    .muted { color: var(--muted); font-size: 12px; }
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin: 16px 0;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
+    }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    label { display:block; font-size:12px; color: var(--muted); margin-bottom:4px; }
+    .varname { font-weight: 600; color: var(--fg); font-size: 11px; opacity: .7; }
+
+    input[type="text"], input[type="number"], select, textarea {
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      min-width: 200px;
+      width: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      transition: background-color .25s ease, color .25s ease, border-color .25s ease;
+    }
+    textarea { height: 60px; }
+    button {
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background-color .2s ease, color .2s ease, border-color .2s ease, opacity .2s ease;
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--btn-ghost-fg);
+      border: 1px solid var(--border);
+    }
+    button.ghost:hover:not(:disabled) { background: var(--btn-ghost-hover-bg); }
+    button:disabled { cursor: not-allowed; background: var(--btn-disabled-bg); color: var(--btn-disabled-fg); border-color: var(--btn-border); opacity: 1; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    pre { background: var(--code-bg); color: #e5e7eb; padding: 12px; border-radius: 8px; overflow: auto; }
+
+    /* Переключатель темы */
+    .topbar {
+      display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;
+    }
+    .theme-toggle {
+      display:inline-flex; align-items:center; gap:8px; font-size:12px; color:var(--muted);
+      user-select:none;
+    }
+    .switch {
+      position: relative; width: 48px; height: 26px; border-radius: 999px; background: var(--border); border: 1px solid var(--border);
+      transition: background-color .25s ease, border-color .25s ease;
+    }
+    .switch .dot {
+      position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--panel); box-shadow: var(--shadow);
+      transition: transform .25s ease, background-color .25s ease;
+    }
+    html[data-theme="dark"] .switch .dot { transform: translateX(22px); }
+
+    /* Drag & Drop */
+    .dropzone {
+      border: 2px dashed #94a3b8; border-radius: 12px; padding: 20px; text-align: center; color: var(--muted);
+      transition: .15s border-color, .15s background, .15s color;
+      background: var(--surface);
+    }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(167,139,250,0.08); color: var(--fg); }
+
+    /* Прогресс */
+    .progress {
+      width: 100%; height: 10px; background: var(--progress-bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border);
+      transition: background-color .25s ease, border-color .25s ease;
+    }
+    .progress > .bar { height: 100%; width: 0%; background: linear-gradient(90deg, #60a5fa, #3b82f6); transition: width .1s ease; }
+    .progress.indeterminate > .bar {
+      position: relative; width: 40%; animation: indet 1.2s infinite ease-in-out; background: linear-gradient(90deg, #c084fc, #8b5cf6);
+    }
+    @keyframes indet { 0% { left: -40%; } 50% { left: 30%; } 100% { left: 100%; } }
+    .progress > .pct { position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 10px; color: var(--fg); }
+
+    .links a { margin-right: 10px; text-decoration: none; color: var(--link); }
+    .pill { display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid var(--border); }
+    .pill.ok { color: var(--success); border-color: #bbf7d0; background:#0b3b1a20; }
+    .pill.warn { color: var(--warn); border-color: #fde68a; background:#7a560820; }
+    .pill.err { color: var(--danger); border-color: #fecaca; background:#4e121220; }
+
+    /* Toasts */
+    .toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
+    .toast {
+      background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+      padding: 10px 12px; border-radius: 8px; box-shadow: var(--shadow);
+      max-width: 360px; transition: opacity .2s ease, transform .2s ease;
+    }
+    .toast.ok { border-color: #bbf7d0; }
+    .toast.warn { border-color: #fde68a; }
+    .toast.error { border-color: #fecaca; }
+
+    /* Таблица результатов */
+    table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
+    table.tbl th { background: var(--surface); position: sticky; top: 0; z-index: 1; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>Whisper Transcribe UI <span class="badge">mini</span></h1>
+      <p class="muted">Загрузка аудио, распознавание речи и экспорт результата в TXT/SRT/JSON. Работает через API вашего сервера.</p>
+    </div>
+    <div class="row" style="gap:10px">
+      <div class="theme-toggle">
+        Тема
+        <div id="themeSwitch" class="switch" role="switch" aria-checked="false" tabindex="0">
+          <div class="dot"></div>
+        </div>
+        <span id="themeLabel" class="muted">Светлая</span>
+      </div>
+      <button id="restartPollBtn" class="ghost">Хард‑ресет</button>
+    </div>
+  </div>
+
+  <!-- Настройки -->
+  <div class="card">
+    <h2>1) Настройки распознавания</h2>
+    <div class="grid">
+      <div>
+        <label for="WHISPER_DEVICE">Устройство выполнения <span class="varname">(WHISPER_DEVICE)</span></label>
+        <select id="WHISPER_DEVICE" title="auto: попытка CUDA, иначе CPU">
+          <option value="auto">авто (CUDA→CPU)</option>
+          <option value="cuda">только CUDA (GPU)</option>
+          <option value="cpu">только CPU</option>
+        </select>
+      </div>
+      <div>
+        <label for="WHISPER_MODEL">Модель <span class="varname">(WHISPER_MODEL)</span></label>
+        <input id="WHISPER_MODEL" type="text" placeholder="например: tiny/base/small/medium/large-v3" />
+      </div>
+      <div>
+        <label for="WHISPER_COMPUTE_TYPE">Тип вычислений <span class="varname">(WHISPER_COMPUTE_TYPE)</span></label>
+        <input id="WHISPER_COMPUTE_TYPE" type="text" placeholder="по умолч.: float16 для CUDA, int8 для CPU" />
+      </div>
+      <div>
+        <label for="WHISPER_LANGUAGE">Язык <span class="varname">(WHISPER_LANGUAGE)</span></label>
+        <input id="WHISPER_LANGUAGE" type="text" placeholder="например: ru (пусто = автоопределение)" />
+      </div>
+      <div>
+        <label for="WHISPER_TASK">Задача <span class="varname">(WHISPER_TASK)</span></label>
+        <select id="WHISPER_TASK">
+          <option value="transcribe">транскрибация (без перевода)</option>
+          <option value="translate">перевод на английский</option>
+        </select>
+      </div>
+      <div>
+        <label for="WHISPER_BEAM">Ширина бима <span class="varname">(WHISPER_BEAM)</span></label>
+        <input id="WHISPER_BEAM" type="number" min="1" step="1" placeholder="например: 8" />
+      </div>
+      <div>
+        <label for="WHISPER_PATIENCE">Терпение (patience) <span class="varname">(WHISPER_PATIENCE)</span></label>
+        <input id="WHISPER_PATIENCE" type="number" step="0.1" placeholder="например: 1.0" />
+      </div>
+      <div>
+        <label for="WHISPER_LENGTH_PENALTY">Штраф за длину <span class="varname">(WHISPER_LENGTH_PENALTY)</span></label>
+        <input id="WHISPER_LENGTH_PENALTY" type="number" step="0.1" placeholder="например: 1.0" />
+      </div>
+      <div>
+        <label><input id="WHISPER_CONDITION_PREV" type="checkbox" /> Учитывать предыдущий текст <span class="varname">(WHISPER_CONDITION_PREV)</span></label>
+      </div>
+      <div>
+        <label for="WHISPER_VAD_MIN_SIL_MS">Мин. тишина для VAD (мс) <span class="varname">(WHISPER_VAD_MIN_SIL_MS)</span></label>
+        <input id="WHISPER_VAD_MIN_SIL_MS" type="number" step="50" placeholder="например: 300" />
+      </div>
+      <div style="grid-column: 1/-1">
+        <label for="WHISPER_PROMPT">Начальная подсказка (стиль/лексика) <span class="varname">(WHISPER_PROMPT)</span></label>
+        <textarea id="WHISPER_PROMPT" placeholder="Например: «Интервью, технические термины…»"></textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="applySettings">Применить настройки</button>
+      <button class="ghost" id="resetSettings">Сбросить (по умолчанию)</button>
+      <span id="settingsStatus" class="muted"></span>
+    </div>
+  </div>
+
+  <!-- Загрузка -->
+  <div class="card">
+    <h2>2) Загрузка файла</h2>
+    <div id="dropzone" class="dropzone">
+      Перетащите файл сюда или выберите вручную
+      <div class="row" style="justify-content:center; margin-top:10px">
+        <input type="file" id="fileInput" />
+        <button id="uploadBtn">Загрузить</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label for="uploadedSelect" style="margin:0">или выберите из загруженных:</label>
+      <select id="uploadedSelect" style="min-width:260px"></select>
+      <button id="refreshUploads" class="ghost">Обновить список</button>
+      <button id="useSelectedBtn">Использовать</button>
+    </div>
+    <div style="margin-top:10px">
+      <div class="progress" id="uploadProgress" role="progressbar" aria-label="Загрузка файла" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-hidden="true" style="display:none">
+        <div class="bar" id="uploadBar"></div>
+        <div class="pct" id="uploadPct">0%</div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span id="uploadInfo" class="muted"></span>
+        <span id="uploadOk" class="pill ok" style="display:none">Файл сохранён</span>
+        <span id="uploadErr" class="pill err" style="display:none">Ошибка загрузки</span>
+      </div>
+      <div class="mono" id="storedPath"></div>
+    </div>
+  </div>
+
+  <!-- Задача -->
+  <div class="card">
+    <h2>3) Создание задачи</h2>
+    <div class="row">
+      <button id="createTaskBtn" disabled>Создать задачу</button>
+      <span id="taskInfo" class="muted"></span>
+    </div>
+    <div class="mono" id="taskId"></div>
+  </div>
+
+  <!-- Статус/результат -->
+  <div class="card">
+    <h2>4) Статус и результат</h2>
+    <div class="row">
+      <button id="pollBtn" disabled>Проверять статус</button>
+      <button id="stopPollBtn" disabled class="ghost">Остановить</button>
+      <span id="statusText" class="muted"></span>
+    </div>
+    <div class="row" style="align-items:center; margin-top:8px">
+      <div class="progress indeterminate" id="workProgress" role="progressbar" aria-label="Прогресс распознавания" aria-valuemin="0" aria-valuemax="100" aria-hidden="true" style="display:none; width:280px">
+        <div class="bar" id="workBar"></div>
+        <div class="pct" id="workPct">0%</div>
+      </div>
+      <span id="workHint" class="muted" style="display:none">Распознаём…</span>
+    </div>
+    <div class="links" id="exportLinks" style="margin:8px 0"></div>
+    <div id="phrasesTableWrap" style="display:none; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
+      <table class="tbl" id="phrasesTable" aria-label="Результаты транскрибации">
+        <thead>
+          <tr>
+            <th style="width:120px">Начало</th>
+            <th style="width:120px">Конец</th>
+            <th>Текст</th>
+          </tr>
+        </thead>
+        <tbody id="phrasesTbody"></tbody>
+      </table>
+    </div>
+    <pre id="resultBox" style="display:none"></pre>
+  </div>
+
+  <!-- Список задач -->
+  <div class="card">
+    <h2>5) Список задач</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button id="refreshTasks" class="ghost">Обновить список задач</button>
+      <span id="tasksInfo" class="muted"></span>
+    </div>
+    <div id="tasksContainer" class="mono" style="overflow:auto"></div>
+  </div>
+
+  <!-- Toast notifications -->
+  <div id="toasts" class="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <script>
+    // ===== Тема: переключатель, хранение, анимация =====
+    const THEME_KEY = 'whisper_ui_theme';
+    const themeSwitch = document.getElementById('themeSwitch');
+    const themeLabel = document.getElementById('themeLabel');
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      themeSwitch.setAttribute('aria-checked', String(theme === 'dark'));
+      themeLabel.textContent = theme === 'dark' ? 'Тёмная' : 'Светлая';
+      localStorage.setItem(THEME_KEY, theme);
+    }
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    }
+    function initTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved) {
+        applyTheme(saved);
+      } else {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        applyTheme(prefersDark ? 'dark' : 'light');
+      }
+    }
+    themeSwitch.addEventListener('click', toggleTheme);
+    themeSwitch.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTheme(); }});
+    initTheme();
+
+    // ===== Хелперы =====
+    const $ = id => document.getElementById(id);
+    const els = ids => Object.fromEntries(ids.map(id => [id, $(id)]));
+
+    const {
+      WHISPER_DEVICE, WHISPER_MODEL, WHISPER_COMPUTE_TYPE, WHISPER_LANGUAGE, WHISPER_TASK,
+      WHISPER_BEAM, WHISPER_PATIENCE, WHISPER_LENGTH_PENALTY, WHISPER_CONDITION_PREV,
+      WHISPER_VAD_MIN_SIL_MS, WHISPER_PROMPT,
+      applySettings, resetSettings, settingsStatus,
+      dropzone, fileInput, uploadBtn, uploadInfo, uploadProgress, uploadBar, uploadPct, uploadOk, uploadErr, storedPath,
+      uploadedSelect, refreshUploads, useSelectedBtn,
+      createTaskBtn, taskInfo, taskId,
+      pollBtn, stopPollBtn, restartPollBtn, statusText, workProgress, workBar, workPct, workHint, resultBox, exportLinks, phrasesTableWrap, phrasesTbody,
+      toasts,
+      refreshTasks, tasksInfo, tasksContainer,
+    } = els([
+      'WHISPER_DEVICE','WHISPER_MODEL','WHISPER_COMPUTE_TYPE','WHISPER_LANGUAGE','WHISPER_TASK',
+      'WHISPER_BEAM','WHISPER_PATIENCE','WHISPER_LENGTH_PENALTY','WHISPER_CONDITION_PREV',
+      'WHISPER_VAD_MIN_SIL_MS','WHISPER_PROMPT',
+      'applySettings','resetSettings','settingsStatus',
+      'dropzone','fileInput','uploadBtn','uploadInfo','uploadProgress','uploadBar','uploadPct','uploadOk','uploadErr','storedPath',
+      'uploadedSelect','refreshUploads','useSelectedBtn',
+      'createTaskBtn','taskInfo','taskId',
+      'pollBtn','stopPollBtn','restartPollBtn','statusText','workProgress','workBar','workPct','workHint','resultBox','exportLinks','phrasesTableWrap','phrasesTbody',
+      'toasts',
+      'refreshTasks','tasksInfo','tasksContainer',
+    ]);
+
+    let currentTaskId = null;
+    let pollTimer = null;
+    let isPolling = false;
+    let statusFetchController = null;
+
+    function setLoading(el, loading) { el.disabled = loading; }
+    function show(el, on) { el.style.display = on ? '' : 'none'; }
+    function setProgress(pct) { uploadBar.style.width = Math.max(0, Math.min(100, pct)) + '%'; if (uploadPct) uploadPct.textContent = Math.round(pct) + '%'; if (uploadProgress) uploadProgress.setAttribute('aria-valuenow', String(Math.round(Math.max(0, Math.min(100, pct))))); }
+    function setWorkProgress(pct) { const clamped = Math.max(0, Math.min(100, pct)); if (workBar) workBar.style.width = clamped + '%'; if (workPct) workPct.textContent = Math.round(clamped) + '%'; if (workProgress) workProgress.setAttribute('aria-valuenow', String(Math.round(clamped))); }
+    function fmtETA(sec) { if (sec == null || isNaN(sec)) return ''; const s = Math.max(0, Math.round(sec)); const m = Math.floor(s/60); const r = s%60; return `${m}:${String(r).padStart(2,'0')}`; }
+
+    // ===== Настройки: localStorage =====
+    const LS_PREFIX = 'whisper_ui_';
+    function collectSettings() {
+      return {
+        WHISPER_DEVICE: WHISPER_DEVICE.value,
+        WHISPER_MODEL: WHISPER_MODEL.value,
+        WHISPER_COMPUTE_TYPE: WHISPER_COMPUTE_TYPE.value,
+        WHISPER_LANGUAGE: WHISPER_LANGUAGE.value,
+        WHISPER_TASK: WHISPER_TASK.value,
+        WHISPER_BEAM: WHISPER_BEAM.value,
+        WHISPER_PATIENCE: WHISPER_PATIENCE.value,
+        WHISPER_LENGTH_PENALTY: WHISPER_LENGTH_PENALTY.value,
+        WHISPER_CONDITION_PREV: WHISPER_CONDITION_PREV.checked,
+        WHISPER_VAD_MIN_SIL_MS: WHISPER_VAD_MIN_SIL_MS.value,
+        WHISPER_PROMPT: WHISPER_PROMPT.value,
+      };
+    }
+    function saveSettingsToLS() {
+      const payload = collectSettings();
+      Object.entries(payload).forEach(([k,v]) => localStorage.setItem(LS_PREFIX + k, String(v ?? '')));
+    }
+    function loadSettingsFromLS() {
+      const get = k => localStorage.getItem(LS_PREFIX + k) ?? '';
+      WHISPER_DEVICE.value = get('WHISPER_DEVICE') || 'auto';
+      WHISPER_MODEL.value = get('WHISPER_MODEL');
+      WHISPER_COMPUTE_TYPE.value = get('WHISPER_COMPUTE_TYPE');
+      WHISPER_LANGUAGE.value = get('WHISPER_LANGUAGE');
+      WHISPER_TASK.value = get('WHISPER_TASK') || 'transcribe';
+      WHISPER_BEAM.value = get('WHISPER_BEAM');
+      WHISPER_PATIENCE.value = get('WHISPER_PATIENCE');
+      WHISPER_LENGTH_PENALTY.value = get('WHISPER_LENGTH_PENALTY');
+      WHISPER_CONDITION_PREV.checked = (get('WHISPER_CONDITION_PREV') || '').toLowerCase() === 'true';
+      WHISPER_VAD_MIN_SIL_MS.value = get('WHISPER_VAD_MIN_SIL_MS');
+      WHISPER_PROMPT.value = get('WHISPER_PROMPT');
+    }
+    function resetSettingsToDefaults() {
+      WHISPER_DEVICE.value = 'auto';
+      WHISPER_MODEL.value = '';
+      WHISPER_COMPUTE_TYPE.value = '';
+      WHISPER_LANGUAGE.value = '';
+      WHISPER_TASK.value = 'transcribe';
+      WHISPER_BEAM.value = '';
+      WHISPER_PATIENCE.value = '';
+      WHISPER_LENGTH_PENALTY.value = '';
+      WHISPER_CONDITION_PREV.checked = false;
+      WHISPER_VAD_MIN_SIL_MS.value = '';
+      WHISPER_PROMPT.value = '';
+    }
+    async function loadSettingsFromAPI() {
+      try {
+        const res = await fetch('/api/v1/settings');
+        const data = await res.json();
+        if (!localStorage.getItem(LS_PREFIX + 'WHISPER_DEVICE')) {
+          // Первичная инициализация из API, если в LS пусто
+          WHISPER_DEVICE.value = data.WHISPER_DEVICE || 'auto';
+          WHISPER_MODEL.value = data.WHISPER_MODEL || '';
+          WHISPER_COMPUTE_TYPE.value = data.WHISPER_COMPUTE_TYPE || '';
+          WHISPER_LANGUAGE.value = data.WHISPER_LANGUAGE || '';
+          WHISPER_TASK.value = data.WHISPER_TASK || 'transcribe';
+          WHISPER_BEAM.value = data.WHISPER_BEAM || '';
+          WHISPER_PATIENCE.value = data.WHISPER_PATIENCE || '';
+          WHISPER_LENGTH_PENALTY.value = data.WHISPER_LENGTH_PENALTY || '';
+          WHISPER_CONDITION_PREV.checked = (data.WHISPER_CONDITION_PREV || '').toString().toLowerCase() === 'true';
+          WHISPER_VAD_MIN_SIL_MS.value = data.WHISPER_VAD_MIN_SIL_MS || '';
+          WHISPER_PROMPT.value = data.WHISPER_PROMPT || '';
+        }
+      } catch (e) { console.warn('Не удалось загрузить настройки с сервера', e); showToast('Не удалось загрузить настройки с сервера', 'warn', 4000); }
+    }
+
+    async function applySettingsHandler() {
+      setLoading(applySettings, true);
+      settingsStatus.textContent = 'Применение…';
+      try {
+        const payload = collectSettings();
+        const res = await fetch('/api/v1/settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        settingsStatus.textContent = 'Готово. Модель будет переинициализирована при следующем запросе.';
+        saveSettingsToLS();
+      } catch (e) {
+        settingsStatus.textContent = 'Ошибка: ' + e.message;
+        showToast('Не удалось применить настройки: ' + e.message, 'error');
+      } finally {
+        setLoading(applySettings, false);
+      }
+    }
+    resetSettings.addEventListener('click', () => {
+      resetSettingsToDefaults();
+      settingsStatus.textContent = 'Сброшено. Нажмите «Применить настройки», чтобы отправить на сервер.';
+      showToast('Настройки сброшены локально. Не забудьте применить.', 'warn', 3500);
+    });
+
+    // ===== Загрузка с прогресс‑баром и DnD =====
+    function bindDropzone() {
+      ['dragenter', 'dragover'].forEach(ev =>
+        dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.add('dragover'); }));
+      ['dragleave', 'drop'].forEach(ev =>
+        dropzone.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dropzone.classList.remove('dragover'); }));
+      dropzone.addEventListener('drop', e => {
+        const file = e.dataTransfer?.files?.[0];
+        if (file) fileInput.files = e.dataTransfer.files;
+      });
+    }
+    function resetUploadUI() {
+      show(uploadProgress, false);
+      if (uploadProgress) uploadProgress.setAttribute('aria-hidden', 'true');
+      setProgress(0);
+      uploadInfo.textContent = '';
+      show(uploadOk, false);
+      show(uploadErr, false);
+      storedPath.textContent = '';
+      createTaskBtn.disabled = true;
+    }
+    async function uploadHandler() {
+      const f = fileInput.files?.[0];
+      if (!f) { uploadInfo.textContent = 'Выберите файл'; return; }
+      resetUploadUI();
+      setLoading(uploadBtn, true);
+      show(uploadProgress, true);
+      if (uploadProgress) uploadProgress.setAttribute('aria-hidden', 'false');
+
+      try {
+        const fd = new FormData();
+        fd.append('file', f);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/v1/upload', true);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = (e.loaded / e.total) * 100;
+            setProgress(pct);
+            uploadInfo.textContent = `Загружено: ${pct.toFixed(1)}%`;
+          } else {
+            uploadInfo.textContent = 'Загрузка…';
+          }
+        };
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.DONE) {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              show(uploadOk, true);
+              const data = JSON.parse(xhr.responseText);
+              storedPath.textContent = data.stored_path;
+              createTaskBtn.disabled = false;
+              uploadInfo.textContent = 'Готово';
+              setProgress(100);
+              showToast('Файл загружен', 'ok', 2500);
+            } else {
+              show(uploadErr, true);
+              uploadInfo.textContent = 'Ошибка: ' + (xhr.responseText || xhr.status);
+              setProgress(0);
+              showToast('Ошибка загрузки: ' + (xhr.responseText || xhr.status), 'error');
+            }
+            setLoading(uploadBtn, false);
+            show(uploadProgress, false);
+            if (uploadProgress) uploadProgress.setAttribute('aria-hidden', 'true');
+          }
+        };
+        xhr.send(fd);
+      } catch (e) {
+        show(uploadErr, true);
+        uploadInfo.textContent = 'Ошибка: ' + e.message;
+        setLoading(uploadBtn, false);
+        show(uploadProgress, false);
+        if (uploadProgress) uploadProgress.setAttribute('aria-hidden', 'true');
+        showToast('Ошибка загрузки: ' + e.message, 'error');
+      }
+    }
+
+    // ===== Задача и статус =====
+    async function pollOnce() {
+      if (!currentTaskId || !isPolling) return;
+      try {
+        // прерываем предыдущий запрос, если ещё идёт
+        if (statusFetchController) {
+          try { statusFetchController.abort(); } catch {}
+        }
+        statusFetchController = new AbortController();
+        const res = await fetch(`/api/v1/status/${currentTaskId}`, { signal: statusFetchController.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        statusText.textContent = `статус: ${data.status}` + (data.queue_position != null ? `, позиция в очереди: ${data.queue_position}` : '');
+        if (data.status === 'PENDING' || data.status === 'IN_PROGRESS') {
+          show(workProgress, true);
+          if (workProgress) workProgress.setAttribute('aria-hidden', 'false');
+          show(workHint, true);
+          // Пробуем определить прогресс от сервера
+          let p = null;
+          if (typeof data.progress === 'number') p = data.progress; // может быть 0..1 или 0..100
+          else if (typeof data.percent === 'number') p = data.percent;
+          else if (typeof data.progress_percent === 'number') p = data.progress_percent;
+          if (p != null && !isNaN(p)) {
+            const pct = p <= 1 ? p * 100 : p; // нормализуем
+            workProgress.classList.remove('indeterminate');
+            if (workProgress) workProgress.setAttribute('aria-busy', 'false');
+            setWorkProgress(pct);
+            const etaTxt = (typeof data.eta_seconds === 'number') ? `, ETA: ${fmtETA(data.eta_seconds)}` : '';
+            statusText.textContent = `статус: ${data.status}, ${Math.round(pct)}%${etaTxt}`;
+          } else {
+            // нет данных о прогрессе — показываем индетерминант
+            workProgress.classList.add('indeterminate');
+            if (workProgress) {
+              workProgress.removeAttribute('aria-valuenow');
+              workProgress.setAttribute('aria-busy', 'true');
+            }
+          }
+        }
+        if (data.status === 'COMPLETED') {
+          clearInterval(pollTimer); pollTimer = null; isPolling = false;
+          stopPollBtn.disabled = true; pollBtn.disabled = false;
+          show(workProgress, false); show(workHint, false);
+          if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+          workProgress.classList.add('indeterminate');
+          setWorkProgress(0);
+          renderExportLinks(currentTaskId);
+          statusText.textContent = 'статус: COMPLETED, 100%';
+          const phrases = data.results?.phrases || [];
+          renderPhrasesTable(phrases);
+          // Дополнительно (опционально) текстовый бокс
+          if (phrases.length) {
+            resultBox.style.display = 'block';
+            resultBox.textContent = phrases.map(p => `${String(p.text || '')}`).join('\n');
+          } else {
+            resultBox.style.display = 'none';
+            resultBox.textContent = '';
+          }
+        } else if (data.status === 'FAILED') {
+          clearInterval(pollTimer); pollTimer = null; isPolling = false;
+          stopPollBtn.disabled = true; pollBtn.disabled = false;
+          show(workProgress, false); show(workHint, false);
+          if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+          workProgress.classList.add('indeterminate');
+          setWorkProgress(0);
+          resultBox.style.display = 'block';
+          resultBox.textContent = 'Ошибка: ' + (data.error || 'Неизвестная');
+          clearPhrasesTable();
+          showToast('Задача завершилась ошибкой: ' + (data.error || 'Неизвестная'), 'error');
+        }
+      } catch (e) {
+        if (e && (e.name === 'AbortError' || String(e.message || '').toLowerCase().includes('abort'))) {
+          // намеренно прерванный запрос — тихо выходим
+          return;
+        }
+        console.error(e);
+        showToast('Ошибка при опросе статуса: ' + (e?.message || e), 'warn');
+      } finally {
+        statusFetchController = null;
+      }
+    }
+
+    function renderExportLinks(taskId) {
+      exportLinks.innerHTML = '';
+      if (!taskId) return;
+      const a = (href, text) => { const el = document.createElement('a'); el.href = href; el.textContent = text; el.target = '_blank'; return el; };
+      exportLinks.append(
+        a(`/export/${taskId}.txt`, 'Скачать TXT'),
+        a(`/export/${taskId}.srt`, 'Скачать SRT'),
+        a(`/export/${taskId}.json`, 'Скачать JSON'),
+      );
+    }
+
+    function clearPhrasesTable() {
+      if (phrasesTbody) phrasesTbody.innerHTML = '';
+      if (phrasesTableWrap) phrasesTableWrap.style.display = 'none';
+    }
+
+    function renderPhrasesTable(phrases) {
+      if (!phrasesTbody || !phrasesTableWrap) return;
+      phrasesTbody.innerHTML = '';
+      const rows = (phrases || []).map(p => {
+        const tr = document.createElement('tr');
+        const tdS = document.createElement('td'); tdS.textContent = Number(p.start ?? 0).toFixed(2);
+        const tdE = document.createElement('td'); tdE.textContent = Number(p.end ?? 0).toFixed(2);
+        const tdT = document.createElement('td'); tdT.textContent = String(p.text || '');
+        tr.append(tdS, tdE, tdT);
+        return tr;
+      });
+      rows.forEach(r => phrasesTbody.appendChild(r));
+      phrasesTableWrap.style.display = rows.length ? '' : 'none';
+    }
+
+    async function createTaskHandler() {
+      const path = storedPath.textContent.trim();
+      if (!path) { taskInfo.textContent = 'Нет пути к файлу'; return; }
+      setLoading(createTaskBtn, true);
+      taskInfo.textContent = 'Создаю…';
+      try {
+        const res = await fetch('/api/v1/create_task', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_path: path })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        currentTaskId = data.task_id;
+        taskId.textContent = currentTaskId;
+        pollBtn.disabled = false;
+        taskInfo.textContent = 'Задача создана';
+        // Очистим старые результаты
+        resultBox.style.display = 'none';
+        resultBox.textContent = '';
+        clearPhrasesTable();
+      } catch (e) {
+        taskInfo.textContent = 'Ошибка: ' + e.message;
+        showToast('Не удалось создать задачу: ' + e.message, 'error');
+      } finally {
+        setLoading(createTaskBtn, false);
+      }
+    }
+
+    async function startPolling() {
+      if (!currentTaskId) return;
+      if (pollTimer) clearInterval(pollTimer);
+      isPolling = true;
+      pollTimer = setInterval(pollOnce, 1500);
+      pollOnce();
+      pollBtn.disabled = true; stopPollBtn.disabled = false;
+      show(workProgress, true); show(workHint, true);
+      if (workProgress) { workProgress.setAttribute('aria-hidden', 'false'); workProgress.setAttribute('aria-busy', 'true'); }
+    }
+    async function stopPolling() {
+      // Попытка отменить задачу на сервере, если она ещё идёт
+      if (currentTaskId) {
+        try {
+          await fetch(`/api/v1/cancel/${currentTaskId}`, { method: 'POST' });
+        } catch (e) {
+          // ignore сетевые ошибки при отмене
+        }
+      }
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = null; isPolling = false;
+      if (statusFetchController) { try { statusFetchController.abort(); } catch {} statusFetchController = null; }
+      stopPollBtn.disabled = true; pollBtn.disabled = false;
+      show(workProgress, false); show(workHint, false);
+      if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+      workProgress.classList.add('indeterminate');
+      setWorkProgress(0);
+      clearPhrasesTable();
+      showToast('Задача остановлена', 'warn', 2000);
+    }
+
+    async function hardReset() {
+      stopPolling();
+      try {
+        const res = await fetch('/api/v1/reset', { method: 'POST' });
+        if (!res.ok) throw new Error(await res.text());
+        // Очистка UI
+        currentTaskId = null;
+        taskId.textContent = '';
+        statusText.textContent = '';
+        renderExportLinks(null);
+        resultBox.style.display = 'none';
+        resultBox.textContent = '';
+        pollBtn.disabled = true;
+        stopPollBtn.disabled = true;
+        show(workProgress, false); show(workHint, false);
+        if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+        workProgress.classList.add('indeterminate');
+        setWorkProgress(0);
+        clearPhrasesTable();
+        showToast('Система перезапущена (очередь очищена, модель сброшена).', 'ok', 3000);
+      } catch (e) {
+        showToast('Не удалось выполнить хард‑ресет: ' + (e?.message || e), 'error');
+      }
+    }
+
+    // ===== Список задач =====
+    function renderTasksTable(tasks) {
+      if (!Array.isArray(tasks) || tasks.length === 0) {
+        tasksContainer.innerHTML = '<span class="muted">(Задач пока нет)</span>';
+        return;
+      }
+      const th = ['ID','Статус','Прогресс','ETA','Файл','Поставлена','Начата','Завершена','Результат','Ошибка','Экспорт'];
+      const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+      const fmtTs = (t) => !t ? '' : new Date(t*1000).toLocaleString();
+      const fmtPct = (p) => (typeof p === 'number') ? Math.round((p <= 1 ? p*100 : p)) + '%' : '';
+      const fmtEta = (s) => (typeof s === 'number') ? (Math.floor(s/60)+":"+String(Math.floor(s%60)).padStart(2,'0')) : '';
+      let html = '<table style="border-collapse:collapse; width:100%">';
+      html += '<thead><tr>' + th.map(h => `<th style="text-align:left; border-bottom:1px solid var(--border); padding:6px 8px">${h}</th>`).join('') + '</tr></thead>';
+      html += '<tbody>';
+      for (const t of tasks) {
+        const id = esc(t.task_id);
+        const status = esc(t.status);
+        const progress = fmtPct(t.progress);
+        const eta = fmtEta(t.eta_seconds);
+        const file = esc(t.file_path || '');
+        const enq = esc(fmtTs(t.enqueued_at));
+        const st = esc(fmtTs(t.started_at));
+        const fin = esc(fmtTs(t.finished_at));
+        const hasRes = t.has_result ? 'да' : '';
+        const err = esc(t.error || '');
+        const exports = t.has_result ? `<a href="/export/${id}.txt" target="_blank">txt</a> <a href="/export/${id}.srt" target="_blank">srt</a> <a href="/export/${id}.json" target="_blank">json</a>` : '';
+        html += '<tr>' + [id,status,progress,eta,file,enq,st,fin,hasRes,err,exports]
+          .map(v => `<td style="padding:6px 8px; border-bottom:1px solid var(--border)">${v}</td>`).join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      tasksContainer.innerHTML = html;
+    }
+
+    async function fetchTasks() {
+      tasksInfo.textContent = 'Загрузка…';
+      try {
+        const res = await fetch('/api/v1/tasks');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+        renderTasksTable(tasks);
+        tasksInfo.textContent = `Всего задач: ${tasks.length}`;
+      } catch (e) {
+        tasksInfo.textContent = 'Ошибка загрузки списка задач';
+        showToast('Не удалось получить список задач: ' + (e?.message || e), 'warn');
+      }
+    }
+
+    // ===== Уведомления (toasts) =====
+    function showToast(message, type = 'error', timeout = 5000) {
+      if (!toasts) return alert(message);
+      const el = document.createElement('div');
+      el.className = 'toast ' + type;
+      el.textContent = message;
+      toasts.appendChild(el);
+      // авто‑скрытие
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(6px)';
+        setTimeout(() => el.remove(), 200);
+      }, timeout);
+    }
+
+    // ===== События =====
+    document.getElementById('applySettings').addEventListener('click', applySettingsHandler);
+    document.getElementById('uploadBtn').addEventListener('click', uploadHandler);
+    document.getElementById('createTaskBtn').addEventListener('click', createTaskHandler);
+    document.getElementById('pollBtn').addEventListener('click', startPolling);
+    document.getElementById('stopPollBtn').addEventListener('click', stopPolling);
+    document.getElementById('restartPollBtn').addEventListener('click', hardReset);
+    document.getElementById('refreshTasks').addEventListener('click', fetchTasks);
+    bindDropzone();
+
+    // ===== Список загруженных файлов =====
+    async function fetchUploads() {
+      try {
+        const res = await fetch('/api/v1/uploads');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const files = Array.isArray(data.files) ? data.files : [];
+        uploadedSelect.innerHTML = '';
+        if (files.length === 0) {
+          const opt = document.createElement('option'); opt.value=''; opt.textContent='(пока пусто)'; uploadedSelect.appendChild(opt);
+          return;
+        }
+        for (const f of files) {
+          const opt = document.createElement('option');
+          opt.value = f.path; // абсолютный путь
+          opt.textContent = `${f.name} (${(f.size/1024/1024).toFixed(2)} MB)`;
+          uploadedSelect.appendChild(opt);
+        }
+      } catch (e) {
+        showToast('Не удалось получить список загруженных: ' + (e?.message || e), 'warn');
+      }
+    }
+
+    refreshUploads.addEventListener('click', fetchUploads);
+    useSelectedBtn.addEventListener('click', () => {
+      const val = (uploadedSelect.value || '').trim();
+      if (!val) { showToast('Список пуст или файл не выбран', 'warn'); return; }
+      storedPath.textContent = val;
+      createTaskBtn.disabled = false;
+      uploadInfo.textContent = 'Выбран ранее загруженный файл';
+      show(uploadOk, false); show(uploadErr, false);
+      showToast('Путь подставлен из загруженных. Дубликатов не создаётся.', 'ok', 2500);
+    });
+
+    // ===== Инициализация =====
+    loadSettingsFromLS();
+    loadSettingsFromAPI(); // первичная инициализация, если LS пуст
+    fetchUploads();
+    fetchTasks();
+  </script>
+</body>
+</html>
