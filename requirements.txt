@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 watchfiles
-pydantic
-pydantic-settings
+pydantic==2.7.4
+pydantic-settings==2.3.4
 python-multipart
 faster-whisper
