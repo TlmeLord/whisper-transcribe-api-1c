@@ -1,0 +1,33 @@
+{
+  "presets": [
+    {
+      "name": "fast_cpu",
+      "description": "Быстрый на CPU (int8)",
+      "settings": {
+        "WHISPER_DEVICE": "cpu",
+        "WHISPER_MODEL": "tiny",
+        "WHISPER_COMPUTE_TYPE": "int8",
+        "WHISPER_VAD_ENABLED": true,
+        "WHISPER_LOG_PROGRESS": false,
+        "WHISPER_WORD_TIMESTAMPS": false,
+        "WHISPER_MULTILINGUAL": false,
+        "WHISPER_BATCHED": false,
+        "WHISPER_BATCH_SIZE": 8
+      }
+    },
+    {
+      "name": "accurate_cuda",
+      "description": "Точный на CUDA (float16)",
+      "settings": {
+        "WHISPER_DEVICE": "cuda",
+        "WHISPER_MODEL": "large-v3",
+        "WHISPER_COMPUTE_TYPE": "float16",
+        "WHISPER_BEAM": 8,
+        "WHISPER_VAD_ENABLED": true,
+        "WHISPER_WORD_TIMESTAMPS": true,
+        "WHISPER_MULTILINGUAL": true,
+        "WHISPER_BATCHED": false
+      }
+    }
+  ]
+}

@@ -38,7 +38,7 @@
       --muted: #9aa3b2;
       --primary: #e5e7eb;
       --border: #1f2937;
-      --accent: #a78bfa;
+      --accent: #2563eb;
       --accent-weak: #1f2542;
       --success: #22c55e;
       --warn: #f59e0b;
@@ -140,7 +140,7 @@
       transition: .15s border-color, .15s background, .15s color;
       background: var(--surface);
     }
-    .dropzone.dragover { border-color: var(--accent); background: rgba(167,139,250,0.08); color: var(--fg); }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(37,99,235,0.08); color: var(--fg); }
 
     /* Прогресс */
     .progress {
@@ -149,7 +149,7 @@
     }
     .progress > .bar { height: 100%; width: 0%; background: linear-gradient(90deg, #60a5fa, #3b82f6); transition: width .1s ease; }
     .progress.indeterminate > .bar {
-      position: relative; width: 40%; animation: indet 1.2s infinite ease-in-out; background: linear-gradient(90deg, #c084fc, #8b5cf6);
+      position: relative; width: 40%; animation: indet 1.2s infinite ease-in-out; background: linear-gradient(90deg, #60a5fa, #3b82f6);
     }
     @keyframes indet { 0% { left: -40%; } 50% { left: 30%; } 100% { left: 100%; } }
     .progress > .pct { position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 10px; color: var(--fg); }
@@ -175,6 +175,13 @@
     table.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
     table.tbl th, table.tbl td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; vertical-align: top; }
     table.tbl th { background: var(--surface); position: sticky; top: 0; z-index: 1; }
+    /* Пагинация и анимации списка задач */
+    .slide-fade { transition: opacity .2s ease, transform .2s ease; }
+    .slide-fade.hide { opacity: 0; transform: translateY(6px); }
+    .pager { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+    .pager .info { font-size:12px; color: var(--muted); }
+    .pager button { padding:4px 10px; }
+    .pager button.current { background: var(--accent-weak); color: var(--accent); border: 1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -195,13 +202,45 @@
     </div>
   </div>
 
+  <!-- 0) Пресеты настроек -->
+  <div class="card">
+    <h2>0) Пресеты настроек</h2>
+    <div class="grid">
+      <div>
+        <label for="presetSelect">Выберите пресет</label>
+        <select id="presetSelect" title="Список сохранённых пресетов"></select>
+      </div>
+      <div>
+        <label for="presetName">Имя пресета</label>
+        <input id="presetName" type="text" placeholder="например: my_fast_cuda" pattern="[A-Za-z0-9_-]+" maxlength="64" title="Имя пресета: только латиница, цифры, подчёркивание и дефис. Без пробелов и спецсимволов. Пример: my_fast_cuda. При сохранении имя должно быть уникальным (если не включён overwrite)." />
+      </div>
+      <div>
+        <label for="presetDesc">Описание</label>
+        <input id="presetDesc" type="text" placeholder="краткое описание настроек" />
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button id="presetApplyBtn" class="ghost" title="Применить значения пресета в форму без сохранения">Подставить в форму</button>
+      <label style="display:inline-flex; align-items:center; gap:6px; margin:0 8px">
+        <input id="presetOverwrite" type="checkbox" />
+        <span class="muted" title="Разрешить перезапись существующего пресета при сохранении/импорте">overwrite</span>
+      </label>
+      <button id="presetSaveBtn" title="Сохранить текущие значения формы как пресет">Сохранить пресет</button>
+      <button id="presetDeleteBtn" class="ghost" title="Удалить выбранный пресет">Удалить</button>
+      <button id="presetExportBtn" class="ghost" title="Экспорт всех пресетов в JSON">Экспорт</button>
+      <input id="presetImportFile" type="file" accept="application/json" style="max-width:240px" title="Выберите JSON‑файл с пресетами" />
+      <button id="presetImportBtn" title="Импортировать пресеты из выбранного файла">Импорт</button>
+      <span id="presetsInfo" class="muted"></span>
+    </div>
+  </div>
+
   <!-- Настройки -->
   <div class="card">
     <h2>1) Настройки распознавания</h2>
     <div class="grid">
       <div>
         <label for="WHISPER_DEVICE">Устройство выполнения <span class="varname">(WHISPER_DEVICE)</span></label>
-        <select id="WHISPER_DEVICE" title="auto: попытка CUDA, иначе CPU">
+        <select id="WHISPER_DEVICE" title="Где запускать: auto — сначала GPU (CUDA), если нет — CPU. GPU обычно быстрее.">
           <option value="auto">авто (CUDA→CPU)</option>
           <option value="cuda">только CUDA (GPU)</option>
           <option value="cpu">только CPU</option>
@@ -209,45 +248,72 @@
       </div>
       <div>
         <label for="WHISPER_MODEL">Модель <span class="varname">(WHISPER_MODEL)</span></label>
-        <input id="WHISPER_MODEL" type="text" placeholder="например: tiny/base/small/medium/large-v3" />
+        <input id="WHISPER_MODEL" type="text" placeholder="например: tiny/base/small/medium/large-v3" title="Имя модели. Больше модель — точнее, но медленнее и требует больше памяти." />
       </div>
       <div>
         <label for="WHISPER_COMPUTE_TYPE">Тип вычислений <span class="varname">(WHISPER_COMPUTE_TYPE)</span></label>
-        <input id="WHISPER_COMPUTE_TYPE" type="text" placeholder="по умолч.: float16 для CUDA, int8 для CPU" />
+        <input id="WHISPER_COMPUTE_TYPE" type="text" placeholder="по умолч.: float16 для CUDA, int8 для CPU" title="Точность вычислений. GPU: чаще float16 (быстро). CPU: int8 (экономит память)." />
       </div>
       <div>
         <label for="WHISPER_LANGUAGE">Язык <span class="varname">(WHISPER_LANGUAGE)</span></label>
-        <input id="WHISPER_LANGUAGE" type="text" placeholder="например: ru (пусто = автоопределение)" />
+        <input id="WHISPER_LANGUAGE" type="text" placeholder="например: ru (пусто = автоопределение)" title="Код языка (например, ru). Оставьте пустым для автоопределения." />
       </div>
       <div>
         <label for="WHISPER_TASK">Задача <span class="varname">(WHISPER_TASK)</span></label>
-        <select id="WHISPER_TASK">
+        <select id="WHISPER_TASK" title="transcribe — распознать на исходном языке; translate — перевести на английский">
           <option value="transcribe">транскрибация (без перевода)</option>
           <option value="translate">перевод на английский</option>
         </select>
       </div>
       <div>
         <label for="WHISPER_BEAM">Ширина бима <span class="varname">(WHISPER_BEAM)</span></label>
-        <input id="WHISPER_BEAM" type="number" min="1" step="1" placeholder="например: 8" />
+        <input id="WHISPER_BEAM" type="number" min="1" step="1" placeholder="например: 8" title="Сколько вариантов рассматривать. Больше — точнее, но медленнее." />
       </div>
       <div>
         <label for="WHISPER_PATIENCE">Терпение (patience) <span class="varname">(WHISPER_PATIENCE)</span></label>
-        <input id="WHISPER_PATIENCE" type="number" step="0.1" placeholder="например: 1.0" />
+        <input id="WHISPER_PATIENCE" type="number" step="0.1" placeholder="например: 1.0" title="Сколько времени искать лучший вариант. Больше — дольше и точнее." />
       </div>
       <div>
         <label for="WHISPER_LENGTH_PENALTY">Штраф за длину <span class="varname">(WHISPER_LENGTH_PENALTY)</span></label>
-        <input id="WHISPER_LENGTH_PENALTY" type="number" step="0.1" placeholder="например: 1.0" />
+        <input id="WHISPER_LENGTH_PENALTY" type="number" step="0.1" placeholder="например: 1.0" title="Сдерживает слишком длинные ответы. 1.0 — без штрафа." />
       </div>
       <div>
-        <label><input id="WHISPER_CONDITION_PREV" type="checkbox" /> Учитывать предыдущий текст <span class="varname">(WHISPER_CONDITION_PREV)</span></label>
+        <label><input id="WHISPER_CONDITION_PREV" type="checkbox" title="Учитывать предыдущий текст как контекст. Улучшает связность, но может переносить ошибки." /> Учитывать предыдущий текст <span class="varname">(WHISPER_CONDITION_PREV)</span></label>
       </div>
       <div>
         <label for="WHISPER_VAD_MIN_SIL_MS">Мин. тишина для VAD (мс) <span class="varname">(WHISPER_VAD_MIN_SIL_MS)</span></label>
-        <input id="WHISPER_VAD_MIN_SIL_MS" type="number" step="50" placeholder="например: 300" />
+        <input id="WHISPER_VAD_MIN_SIL_MS" type="number" step="50" placeholder="например: 300" title="Минимальная пауза тишины между фразами (мс). Больше — фразы длиннее." />
       </div>
-      <div style="grid-column: 1/-1">
+      <div>
         <label for="WHISPER_PROMPT">Начальная подсказка (стиль/лексика) <span class="varname">(WHISPER_PROMPT)</span></label>
-        <textarea id="WHISPER_PROMPT" placeholder="Например: «Интервью, технические термины…»"></textarea>
+        <textarea id="WHISPER_PROMPT" placeholder="Например: «Интервью, технические термины…»" title="Подскажите стиль/термины (имена, бренды, темы) — модель охотнее их распознаёт."></textarea>
+      </div>
+      <div>
+        <label><input id="WHISPER_VAD_ENABLED" type="checkbox" title="Автоматически обрезать тишину и делить запись на фразы." /> VAD включён <span class="varname">(WHISPER_VAD_ENABLED)</span></label>
+      </div>
+      <div>
+        <label><input id="WHISPER_LOG_PROGRESS" type="checkbox" title="Печатать подробный прогресс в логи сервера (может быть шумно)." /> Логировать прогресс <span class="varname">(WHISPER_LOG_PROGRESS)</span></label>
+      </div>
+      <div>
+        <label><input id="WHISPER_WORD_TIMESTAMPS" type="checkbox" title="Добавлять таймкоды каждого слова — полезно для субтитров, чуть медленнее." /> Таймкоды слов <span class="varname">(WHISPER_WORD_TIMESTAMPS)</span></label>
+      </div>
+      <div>
+        <label><input id="WHISPER_MULTILINGUAL" type="checkbox" title="Включить поддержку нескольких языков в одной записи (если модель умеет)." /> Мультиязычный <span class="varname">(WHISPER_MULTILINGUAL)</span></label>
+      </div>
+      <div>
+        <label for="WHISPER_HOTWORDS">Hotwords (через запятую) <span class="varname">(WHISPER_HOTWORDS)</span></label>
+        <input id="WHISPER_HOTWORDS" type="text" placeholder="например: OpenAI, CUDA, Whisper" title="Слова‑подсказки (через запятую): имена, бренды, термины." />
+      </div>
+      <div>
+        <label for="WHISPER_MAX_NEW_TOKENS">Макс. новых токенов <span class="varname">(WHISPER_MAX_NEW_TOKENS)</span></label>
+        <input id="WHISPER_MAX_NEW_TOKENS" type="number" min="1" step="1" placeholder="например: 448" title="Ограничение длины вывода (в токенах). Слишком мало — обрежет текст." />
+      </div>
+      <div>
+        <label><input id="WHISPER_BATCHED" type="checkbox" title="Пакетная обработка длинных аудио — быстрее, но требует больше памяти." /> Batched inference <span class="varname">(WHISPER_BATCHED)</span></label>
+      </div>
+      <div>
+        <label for="WHISPER_BATCH_SIZE">Batch size <span class="varname">(WHISPER_BATCH_SIZE)</span></label>
+        <input id="WHISPER_BATCH_SIZE" type="number" min="1" step="1" placeholder="например: 8" title="Размер пакета для пакетной обработки. Больше — быстрее, но больше память." />
       </div>
     </div>
     <div class="row" style="margin-top:12px">
@@ -312,6 +378,12 @@
       </div>
       <span id="workHint" class="muted" style="display:none">Распознаём…</span>
     </div>
+    <div id="modelLoadRow" class="row" style="align-items:center; margin-top:8px; display:none">
+      <div class="progress indeterminate" id="modelProgress" role="progressbar" aria-label="Загрузка модели" aria-hidden="true" style="width:280px">
+        <div class="bar"></div>
+      </div>
+      <span id="modelHint" class="muted">Загрузка модели… (первый запуск может занять время)</span>
+    </div>
     <div class="links" id="exportLinks" style="margin:8px 0"></div>
     <div id="phrasesTableWrap" style="display:none; max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 8px;">
       <table class="tbl" id="phrasesTable" aria-label="Результаты транскрибации">
@@ -325,7 +397,6 @@
         <tbody id="phrasesTbody"></tbody>
       </table>
     </div>
-    <pre id="resultBox" style="display:none"></pre>
   </div>
 
   <!-- Список задач -->
@@ -335,7 +406,8 @@
       <button id="refreshTasks" class="ghost">Обновить список задач</button>
       <span id="tasksInfo" class="muted"></span>
     </div>
-    <div id="tasksContainer" class="mono" style="overflow:auto"></div>
+    <div id="tasksContainer" class="mono slide-fade" style="overflow:auto"></div>
+    <div id="tasksPager" class="pager"></div>
   </div>
 
   <!-- Toast notifications -->
@@ -378,24 +450,32 @@
       WHISPER_DEVICE, WHISPER_MODEL, WHISPER_COMPUTE_TYPE, WHISPER_LANGUAGE, WHISPER_TASK,
       WHISPER_BEAM, WHISPER_PATIENCE, WHISPER_LENGTH_PENALTY, WHISPER_CONDITION_PREV,
       WHISPER_VAD_MIN_SIL_MS, WHISPER_PROMPT,
+      WHISPER_VAD_ENABLED, WHISPER_LOG_PROGRESS, WHISPER_WORD_TIMESTAMPS, WHISPER_MULTILINGUAL,
+      WHISPER_HOTWORDS, WHISPER_MAX_NEW_TOKENS, WHISPER_BATCHED, WHISPER_BATCH_SIZE,
+      presetSelect, presetName, presetDesc, presetOverwrite, presetApplyBtn, presetSaveBtn, presetDeleteBtn, presetExportBtn, presetImportFile, presetImportBtn, presetsInfo,
       applySettings, resetSettings, settingsStatus,
       dropzone, fileInput, uploadBtn, uploadInfo, uploadProgress, uploadBar, uploadPct, uploadOk, uploadErr, storedPath,
       uploadedSelect, refreshUploads, useSelectedBtn,
       createTaskBtn, taskInfo, taskId,
-      pollBtn, stopPollBtn, restartPollBtn, statusText, workProgress, workBar, workPct, workHint, resultBox, exportLinks, phrasesTableWrap, phrasesTbody,
+      pollBtn, stopPollBtn, restartPollBtn, statusText, workProgress, workBar, workPct, workHint, exportLinks, phrasesTableWrap, phrasesTbody,
+      modelLoadRow, modelProgress, modelHint,
       toasts,
-      refreshTasks, tasksInfo, tasksContainer,
+      refreshTasks, tasksInfo, tasksContainer, tasksPager,
     } = els([
       'WHISPER_DEVICE','WHISPER_MODEL','WHISPER_COMPUTE_TYPE','WHISPER_LANGUAGE','WHISPER_TASK',
       'WHISPER_BEAM','WHISPER_PATIENCE','WHISPER_LENGTH_PENALTY','WHISPER_CONDITION_PREV',
       'WHISPER_VAD_MIN_SIL_MS','WHISPER_PROMPT',
+      'WHISPER_VAD_ENABLED','WHISPER_LOG_PROGRESS','WHISPER_WORD_TIMESTAMPS','WHISPER_MULTILINGUAL',
+      'WHISPER_HOTWORDS','WHISPER_MAX_NEW_TOKENS','WHISPER_BATCHED','WHISPER_BATCH_SIZE',
+      'presetSelect','presetName','presetDesc','presetOverwrite','presetApplyBtn','presetSaveBtn','presetDeleteBtn','presetExportBtn','presetImportFile','presetImportBtn','presetsInfo',
       'applySettings','resetSettings','settingsStatus',
       'dropzone','fileInput','uploadBtn','uploadInfo','uploadProgress','uploadBar','uploadPct','uploadOk','uploadErr','storedPath',
       'uploadedSelect','refreshUploads','useSelectedBtn',
       'createTaskBtn','taskInfo','taskId',
-      'pollBtn','stopPollBtn','restartPollBtn','statusText','workProgress','workBar','workPct','workHint','resultBox','exportLinks','phrasesTableWrap','phrasesTbody',
+      'pollBtn','stopPollBtn','restartPollBtn','statusText','workProgress','workBar','workPct','workHint','exportLinks','phrasesTableWrap','phrasesTbody',
+      'modelLoadRow','modelProgress','modelHint',
       'toasts',
-      'refreshTasks','tasksInfo','tasksContainer',
+      'refreshTasks','tasksInfo','tasksContainer','tasksPager',
     ]);
 
     let currentTaskId = null;
@@ -408,9 +488,18 @@
     function setProgress(pct) { uploadBar.style.width = Math.max(0, Math.min(100, pct)) + '%'; if (uploadPct) uploadPct.textContent = Math.round(pct) + '%'; if (uploadProgress) uploadProgress.setAttribute('aria-valuenow', String(Math.round(Math.max(0, Math.min(100, pct))))); }
     function setWorkProgress(pct) { const clamped = Math.max(0, Math.min(100, pct)); if (workBar) workBar.style.width = clamped + '%'; if (workPct) workPct.textContent = Math.round(clamped) + '%'; if (workProgress) workProgress.setAttribute('aria-valuenow', String(Math.round(clamped))); }
     function fmtETA(sec) { if (sec == null || isNaN(sec)) return ''; const s = Math.max(0, Math.round(sec)); const m = Math.floor(s/60); const r = s%60; return `${m}:${String(r).padStart(2,'0')}`; }
+    function fmtTime(t) { if (t == null || isNaN(t)) return ''; const s = Math.max(0, Number(t)); const m = Math.floor(s/60); const r = s - m*60; return `${m}:${r.toFixed(2).padStart(5,'0')}`; }
 
     // ===== Настройки: localStorage =====
     const LS_PREFIX = 'whisper_ui_';
+    const MODEL_INIT_KEY = LS_PREFIX + 'model_init_pending';
+    let modelInitPending = (localStorage.getItem(MODEL_INIT_KEY) === '1');
+    const SHOW_WORD_TS_KEY = LS_PREFIX + 'show_word_ts';
+    let statusWS = null;
+    let lastPhrases = [];
+    let showWordTs = (localStorage.getItem(SHOW_WORD_TS_KEY) || '').toLowerCase() === 'true';
+    let wordTsToggleEl = null;
+    function setShowWordTs(val) { showWordTs = !!val; localStorage.setItem(SHOW_WORD_TS_KEY, String(showWordTs)); if (lastPhrases && lastPhrases.length) renderPhrasesTable(lastPhrases); }
     function collectSettings() {
       return {
         WHISPER_DEVICE: WHISPER_DEVICE.value,
@@ -424,6 +513,14 @@
         WHISPER_CONDITION_PREV: WHISPER_CONDITION_PREV.checked,
         WHISPER_VAD_MIN_SIL_MS: WHISPER_VAD_MIN_SIL_MS.value,
         WHISPER_PROMPT: WHISPER_PROMPT.value,
+        WHISPER_VAD_ENABLED: WHISPER_VAD_ENABLED.checked,
+        WHISPER_LOG_PROGRESS: WHISPER_LOG_PROGRESS.checked,
+        WHISPER_WORD_TIMESTAMPS: WHISPER_WORD_TIMESTAMPS.checked,
+        WHISPER_MULTILINGUAL: WHISPER_MULTILINGUAL.checked,
+        WHISPER_HOTWORDS: WHISPER_HOTWORDS.value,
+        WHISPER_MAX_NEW_TOKENS: WHISPER_MAX_NEW_TOKENS.value,
+        WHISPER_BATCHED: WHISPER_BATCHED.checked,
+        WHISPER_BATCH_SIZE: WHISPER_BATCH_SIZE.value,
       };
     }
     function saveSettingsToLS() {
@@ -443,6 +540,14 @@
       WHISPER_CONDITION_PREV.checked = (get('WHISPER_CONDITION_PREV') || '').toLowerCase() === 'true';
       WHISPER_VAD_MIN_SIL_MS.value = get('WHISPER_VAD_MIN_SIL_MS');
       WHISPER_PROMPT.value = get('WHISPER_PROMPT');
+      WHISPER_VAD_ENABLED.checked = (get('WHISPER_VAD_ENABLED') || 'true').toLowerCase() === 'true';
+      WHISPER_LOG_PROGRESS.checked = (get('WHISPER_LOG_PROGRESS') || '').toLowerCase() === 'true';
+      WHISPER_WORD_TIMESTAMPS.checked = (get('WHISPER_WORD_TIMESTAMPS') || '').toLowerCase() === 'true';
+      WHISPER_MULTILINGUAL.checked = (get('WHISPER_MULTILINGUAL') || '').toLowerCase() === 'true';
+      WHISPER_HOTWORDS.value = get('WHISPER_HOTWORDS');
+      WHISPER_MAX_NEW_TOKENS.value = get('WHISPER_MAX_NEW_TOKENS');
+      WHISPER_BATCHED.checked = (get('WHISPER_BATCHED') || '').toLowerCase() === 'true';
+      WHISPER_BATCH_SIZE.value = get('WHISPER_BATCH_SIZE');
     }
     function resetSettingsToDefaults() {
       WHISPER_DEVICE.value = 'auto';
@@ -456,6 +561,14 @@
       WHISPER_CONDITION_PREV.checked = false;
       WHISPER_VAD_MIN_SIL_MS.value = '';
       WHISPER_PROMPT.value = '';
+      WHISPER_VAD_ENABLED.checked = true;
+      WHISPER_LOG_PROGRESS.checked = false;
+      WHISPER_WORD_TIMESTAMPS.checked = false;
+      WHISPER_MULTILINGUAL.checked = false;
+      WHISPER_HOTWORDS.value = '';
+      WHISPER_MAX_NEW_TOKENS.value = '';
+      WHISPER_BATCHED.checked = false;
+      WHISPER_BATCH_SIZE.value = '8';
     }
     async function loadSettingsFromAPI() {
       try {
@@ -471,9 +584,17 @@
           WHISPER_BEAM.value = data.WHISPER_BEAM || '';
           WHISPER_PATIENCE.value = data.WHISPER_PATIENCE || '';
           WHISPER_LENGTH_PENALTY.value = data.WHISPER_LENGTH_PENALTY || '';
-          WHISPER_CONDITION_PREV.checked = (data.WHISPER_CONDITION_PREV || '').toString().toLowerCase() === 'true';
+          WHISPER_CONDITION_PREV.checked = String(data.WHISPER_CONDITION_PREV).toLowerCase() === 'true';
           WHISPER_VAD_MIN_SIL_MS.value = data.WHISPER_VAD_MIN_SIL_MS || '';
           WHISPER_PROMPT.value = data.WHISPER_PROMPT || '';
+          WHISPER_VAD_ENABLED.checked = String(data.WHISPER_VAD_ENABLED).toLowerCase() === 'true';
+          WHISPER_LOG_PROGRESS.checked = String(data.WHISPER_LOG_PROGRESS).toLowerCase() === 'true';
+          WHISPER_WORD_TIMESTAMPS.checked = String(data.WHISPER_WORD_TIMESTAMPS).toLowerCase() === 'true';
+          WHISPER_MULTILINGUAL.checked = String(data.WHISPER_MULTILINGUAL).toLowerCase() === 'true';
+          WHISPER_HOTWORDS.value = data.WHISPER_HOTWORDS || '';
+          WHISPER_MAX_NEW_TOKENS.value = data.WHISPER_MAX_NEW_TOKENS || '';
+          WHISPER_BATCHED.checked = String(data.WHISPER_BATCHED).toLowerCase() === 'true';
+          WHISPER_BATCH_SIZE.value = data.WHISPER_BATCH_SIZE || '';
         }
       } catch (e) { console.warn('Не удалось загрузить настройки с сервера', e); showToast('Не удалось загрузить настройки с сервера', 'warn', 4000); }
     }
@@ -489,6 +610,9 @@
         if (!res.ok) throw new Error(await res.text());
         settingsStatus.textContent = 'Готово. Модель будет переинициализирована при следующем запросе.';
         saveSettingsToLS();
+        localStorage.setItem(MODEL_INIT_KEY, '1');
+        modelInitPending = true;
+        updateModelLoadUI(true);
       } catch (e) {
         settingsStatus.textContent = 'Ошибка: ' + e.message;
         showToast('Не удалось применить настройки: ' + e.message, 'error');
@@ -557,6 +681,7 @@
               uploadInfo.textContent = 'Готово';
               setProgress(100);
               showToast('Файл загружен', 'ok', 2500);
+              fetchUploads();
             } else {
               show(uploadErr, true);
               uploadInfo.textContent = 'Ошибка: ' + (xhr.responseText || xhr.status);
@@ -602,23 +727,21 @@
           if (p != null && !isNaN(p)) {
             const pct = p <= 1 ? p * 100 : p; // нормализуем
             workProgress.classList.remove('indeterminate');
-            if (workProgress) workProgress.setAttribute('aria-busy', 'false');
+            if (workProgress) workProgress.setAttribute('aria-busy','false');
             setWorkProgress(pct);
             const etaTxt = (typeof data.eta_seconds === 'number') ? `, ETA: ${fmtETA(data.eta_seconds)}` : '';
             statusText.textContent = `статус: ${data.status}, ${Math.round(pct)}%${etaTxt}`;
+            if (modelInitPending) { modelInitPending=false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false); }
           } else {
             workProgress.classList.add('indeterminate');
-            if (workProgress) {
-              workProgress.removeAttribute('aria-valuenow');
-              workProgress.setAttribute('aria-busy', 'true');
-            }
+            if (workProgress) { workProgress.removeAttribute('aria-valuenow'); workProgress.setAttribute('aria-busy','true'); }
           }
         }
         if (data.status === 'COMPLETED') {
           clearInterval(pollTimer); pollTimer = null; isPolling = false;
           stopPollBtn.disabled = true; pollBtn.disabled = false;
           show(workProgress, false); show(workHint, false);
-          if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+          if (workProgress) { workProgress.setAttribute('aria-hidden','true'); workProgress.setAttribute('aria-busy','false'); }
           workProgress.classList.add('indeterminate');
           setWorkProgress(0);
           const results = data.results || null;
@@ -626,23 +749,21 @@
             const raw = Array.isArray(results.phrases) ? results.phrases : (Array.isArray(results.segments) ? results.segments : []);
             const segs = raw.map(s => ({ start: s.start, end: s.end, text: s.text }));
             renderPhrasesTable(segs);
-            resultBox.style.display = '';
-            const plainText = results.text != null ? String(results.text) : segs.map(s => s.text).join('\n');
-            resultBox.textContent = (plainText || '').trim();
             renderExportLinks(currentTaskId);
           }
           statusText.textContent = 'статус: COMPLETED, 100%';
+          modelInitPending = false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false);
         } else if (data.status === 'FAILED') {
           clearInterval(pollTimer); pollTimer = null; isPolling = false;
           stopPollBtn.disabled = true; pollBtn.disabled = false;
           show(workProgress, false); show(workHint, false);
-          if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
+          if (workProgress) { workProgress.setAttribute('aria-hidden','true'); workProgress.setAttribute('aria-busy','false'); }
           workProgress.classList.add('indeterminate');
           setWorkProgress(0);
-          resultBox.style.display = 'block';
-          resultBox.textContent = 'Ошибка: ' + (data.error || 'Неизвестная');
+          renderExportLinks(null);
           clearPhrasesTable();
           showToast('Задача завершилась ошибкой: ' + (data.error || 'Неизвестная'), 'error');
+          modelInitPending = false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false);
         }
       } catch (e) {
         if (e && (e.name === 'AbortError' || String(e.message || '').toLowerCase().includes('abort'))) {
@@ -679,11 +800,58 @@
         const tdS = document.createElement('td'); tdS.textContent = Number(p.start ?? 0).toFixed(2);
         const tdE = document.createElement('td'); tdE.textContent = Number(p.end ?? 0).toFixed(2);
         const tdT = document.createElement('td'); tdT.textContent = String(p.text || '');
+        if (showWordTs && Array.isArray(p.words) && p.words.length) {
+          const div = document.createElement('div');
+          div.style.marginTop = '6px';
+          div.style.fontSize = '12px';
+          div.style.color = 'var(--muted)';
+          const parts = p.words.map(w => {
+            const ws = fmtTime(w.start); const we = fmtTime(w.end);
+            const wt = String(w.word || w.text || '').trim();
+            return `${wt} [${ws}–${we}]`;
+          });
+          div.textContent = parts.join(' · ');
+          tdT.appendChild(div);
+        }
         tr.append(tdS, tdE, tdT);
         return tr;
       });
       rows.forEach(r => phrasesTbody.appendChild(r));
       phrasesTableWrap.style.display = rows.length ? '' : 'none';
+      const anyWords = (phrases || []).some(p => Array.isArray(p.words) && p.words.length);
+      ensureWordTsToggle(anyWords);
+    }
+
+    function ensureWordTsToggle(hasWords) {
+      if (!exportLinks) return;
+      if (!wordTsToggleEl) {
+        const wrap = document.createElement('div');
+        wrap.id = 'wordTsToggleWrap';
+        wrap.style.display = 'inline-flex';
+        wrap.style.alignItems = 'center';
+        wrap.style.gap = '8px';
+        wrap.style.marginLeft = '8px';
+        const label = document.createElement('label');
+        label.style.display = 'inline-flex';
+        label.style.alignItems = 'center';
+        label.style.gap = '6px';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = !!showWordTs;
+        cb.addEventListener('change', () => setShowWordTs(cb.checked));
+        const span = document.createElement('span');
+        span.className = 'muted';
+        span.textContent = 'Показывать таймкоды слов';
+        label.append(cb, span);
+        wrap.append(label);
+        exportLinks.after(wrap);
+        wordTsToggleEl = wrap;
+      }
+      wordTsToggleEl.style.display = hasWords ? '' : 'none';
+      if (hasWords) {
+        const cb = wordTsToggleEl.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = !!showWordTs;
+      }
     }
 
     async function createTaskHandler() {
@@ -702,9 +870,9 @@
         taskId.textContent = currentTaskId;
         pollBtn.disabled = false;
         taskInfo.textContent = 'Задача создана';
-        resultBox.style.display = 'none';
-        resultBox.textContent = '';
         clearPhrasesTable();
+        renderExportLinks(null);
+        fetchTasks();
       } catch (e) {
         taskInfo.textContent = 'Ошибка: ' + e.message;
         showToast('Не удалось создать задачу: ' + e.message, 'error');
@@ -715,16 +883,87 @@
 
     async function startPolling() {
       if (!currentTaskId) return;
-      if (pollTimer) clearInterval(pollTimer);
       isPolling = true;
-      pollTimer = setInterval(pollOnce, 1500);
-      pollOnce();
+      try { if (statusWS) statusWS.close(); } catch {}
+      statusWS = null;
       pollBtn.disabled = true; stopPollBtn.disabled = false;
+      renderExportLinks(null);
+      updateModelLoadUI(modelInitPending);
       show(workProgress, true); show(workHint, true);
       if (workProgress) { workProgress.setAttribute('aria-hidden', 'false'); workProgress.setAttribute('aria-busy', 'true'); }
+      const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+      const url = `${proto}://${location.host}/ws/status/${currentTaskId}`;
+      statusWS = new WebSocket(url);
+      statusWS.onopen = () => { statusText.textContent = 'статус: подключено'; };
+      statusWS.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data);
+          if (!data) return;
+          const st = data.status;
+          let p = null;
+          if (typeof data.progress === 'number') p = data.progress;
+          else if (typeof data.percent === 'number') p = data.percent;
+          else if (typeof data.progress_percent === 'number') p = data.progress_percent;
+          if (st === 'PENDING' || st === 'IN_PROGRESS') {
+            show(workProgress, true);
+            if (p != null && !isNaN(p)) {
+              const pct = p <= 1 ? p * 100 : p;
+              workProgress.classList.remove('indeterminate');
+              if (workProgress) workProgress.setAttribute('aria-busy','false');
+              setWorkProgress(pct);
+              const etaTxt = (typeof data.eta_seconds === 'number') ? `, ETA: ${fmtETA(data.eta_seconds)}` : '';
+              statusText.textContent = `статус: ${st}, ${Math.round(pct)}%${etaTxt}`;
+              if (modelInitPending) { modelInitPending=false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false); }
+            } else {
+              workProgress.classList.add('indeterminate');
+              if (workProgress) { workProgress.removeAttribute('aria-valuenow'); workProgress.setAttribute('aria-busy','true'); }
+              statusText.textContent = `статус: ${st}` + (data.queue_position != null ? `, позиция в очереди: ${data.queue_position}` : '');
+            }
+            scheduleTasksRefresh(300);
+          }
+          if (st === 'COMPLETED') {
+            show(workProgress, false); show(workHint, false);
+            if (workProgress) { workProgress.setAttribute('aria-hidden','true'); workProgress.setAttribute('aria-busy','false'); }
+            workProgress.classList.add('indeterminate');
+            setWorkProgress(0);
+            pollBtn.disabled = false; stopPollBtn.disabled = true;
+            const results = data.results || null;
+            if (results) {
+              const raw = Array.isArray(results.phrases) ? results.phrases : (Array.isArray(results.segments) ? results.segments : []);
+              const segs = raw.map(s => ({ start: s.start, end: s.end, text: s.text, words: Array.isArray(s.words) ? s.words : [] }));
+              lastPhrases = segs;
+              renderPhrasesTable(segs);
+              renderExportLinks(currentTaskId);
+            }
+            statusText.textContent = 'статус: COMPLETED, 100%';
+            modelInitPending = false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false);
+            scheduleTasksRefresh(0);
+            try { statusWS?.close(); } catch {}
+            statusWS = null;
+          } else if (st === 'FAILED') {
+            show(workProgress, false); show(workHint, false);
+            if (workProgress) { workProgress.setAttribute('aria-hidden','true'); workProgress.setAttribute('aria-busy','false'); }
+            workProgress.classList.add('indeterminate');
+            setWorkProgress(0);
+            renderExportLinks(null);
+            clearPhrasesTable();
+            ensureWordTsToggle(false);
+            showToast('Задача завершилась ошибкой: ' + (data.error || 'Неизвестная'), 'error');
+            modelInitPending = false; localStorage.removeItem(MODEL_INIT_KEY); updateModelLoadUI(false);
+            scheduleTasksRefresh(0);
+            try { statusWS?.close(); } catch {}
+            statusWS = null;
+          }
+        } catch (e) { console.error('WS message parse error', e); }
+      };
+      statusWS.onerror = () => { showToast('Ошибка WebSocket соединения', 'warn'); };
+      statusWS.onclose = () => {
+        stopPollBtn.disabled = true;
+        if (!currentTaskId) pollBtn.disabled = true; else pollBtn.disabled = false;
+      };
     }
+
     async function stopPolling() {
-      // Попытка отменить задачу на сервере, если она ещё идёт
       if (currentTaskId) {
         try {
           await fetch(`/api/v1/cancel/${currentTaskId}`, { method: 'POST' });
@@ -732,20 +971,27 @@
           // ignore сетевые ошибки при отмене
         }
       }
+      if (statusFetchController) { try { statusFetchController.abort(); } catch {} statusFetchController = null; }
+      try { statusWS?.close(); } catch {}
+      statusWS = null;
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = null; isPolling = false;
-      if (statusFetchController) { try { statusFetchController.abort(); } catch {} statusFetchController = null; }
       stopPollBtn.disabled = true; pollBtn.disabled = false;
       show(workProgress, false); show(workHint, false);
       if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
       workProgress.classList.add('indeterminate');
       setWorkProgress(0);
       clearPhrasesTable();
+      ensureWordTsToggle(false);
       showToast('Задача остановлена', 'warn', 2000);
     }
 
     async function hardReset() {
       stopPolling();
+      try { if (statusWS) statusWS.close(); } catch {}
+      statusWS = null;
+      localStorage.removeItem(SHOW_WORD_TS_KEY);
+      ensureWordTsToggle(false);
       try {
         const res = await fetch('/api/v1/reset', { method: 'POST' });
         if (!res.ok) throw new Error(await res.text());
@@ -754,15 +1000,18 @@
         taskId.textContent = '';
         statusText.textContent = '';
         renderExportLinks(null);
-        resultBox.style.display = 'none';
-        resultBox.textContent = '';
+        clearPhrasesTable();
+        lastPhrases = [];
+        ensureWordTsToggle(false);
         pollBtn.disabled = true;
         stopPollBtn.disabled = true;
         show(workProgress, false); show(workHint, false);
         if (workProgress) { workProgress.setAttribute('aria-hidden', 'true'); workProgress.setAttribute('aria-busy', 'false'); }
         workProgress.classList.add('indeterminate');
         setWorkProgress(0);
-        clearPhrasesTable();
+        localStorage.setItem(MODEL_INIT_KEY, '1');
+        modelInitPending = true;
+        updateModelLoadUI(true);
         showToast('Система перезапущена (очередь очищена, модель сброшена).', 'ok', 3000);
       } catch (e) {
         showToast('Не удалось выполнить хард‑ресет: ' + (e?.message || e), 'error');
@@ -795,26 +1044,64 @@
         const hasRes = t.has_result ? 'да' : '';
         const err = esc(t.error || '');
         const exports = t.has_result ? `<a href="/export/${id}.txt" target="_blank">txt</a> <a href="/export/${id}.srt" target="_blank">srt</a> <a href="/export/${id}.json" target="_blank">json</a>` : '';
-        html += '<tr>' + [id,status,progress,eta,file,enq,st,fin,hasRes,err,exports]
-          .map(v => `<td style="padding:6px 8px; border-bottom:1px solid var(--border)">${v}</td>`).join('') + '</tr>';
+        const isCurrentTask = (currentTaskId && t.task_id === currentTaskId);
+        const rowStyle = isCurrentTask ? 'background-color: var(--accent-low); font-weight: 500;' : '';
+        html += `<tr style="${rowStyle}">` + [id,status,progress,eta,file,enq,st,fin,hasRes,err,exports]
+        .map(v => `<td style="padding:6px 8px; border-bottom:1px solid var(--border)">${v}</td>`).join('') + '</tr>';
       }
       html += '</tbody></table>';
       tasksContainer.innerHTML = html;
     }
 
-    async function fetchTasks() {
-      tasksInfo.textContent = 'Загрузка…';
-      try {
-        const res = await fetch('/api/v1/tasks');
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        const tasks = Array.isArray(data.tasks) ? data.tasks : [];
-        renderTasksTable(tasks);
-        tasksInfo.textContent = `Всего задач: ${tasks.length}`;
-      } catch (e) {
-        tasksInfo.textContent = 'Ошибка загрузки списка задач';
-        showToast('Не удалось получить список задач: ' + (e?.message || e), 'warn');
+    function renderTasksPage(animate = true) {
+      const total = allTasks.length;
+      const totalPages = Math.max(1, Math.ceil(total / TASKS_PER_PAGE));
+      currentTasksPage = Math.max(1, Math.min(currentTasksPage, totalPages));
+      const start = (currentTasksPage - 1) * TASKS_PER_PAGE;
+      const end = start + TASKS_PER_PAGE;
+      const pageItems = allTasks.slice(start, end);
+      const doRender = () => renderTasksTable(pageItems);
+      if (animate) {
+        tasksContainer.classList.add('slide-fade','hide');
+        setTimeout(() => { doRender(); tasksContainer.classList.add('slide-fade'); tasksContainer.classList.remove('hide'); }, 120);
+      } else {
+        doRender();
       }
+      renderPager(totalPages, total);
+    }
+
+    function renderPager(totalPages, totalItems) {
+      if (!tasksPager) return;
+      tasksPager.innerHTML = '';
+      const mkBtn = (label, disabled, handler, current=false) => {
+        const b = document.createElement('button');
+        b.textContent = label;
+        if (disabled) b.disabled = true;
+        if (current) b.classList.add('current');
+        b.addEventListener('click', handler);
+        return b;
+      };
+      const prev = mkBtn('‹', currentTasksPage <= 1, () => setTasksPage(currentTasksPage - 1));
+      const next = mkBtn('›', currentTasksPage >= totalPages, () => setTasksPage(currentTasksPage + 1));
+      tasksPager.append(prev);
+      const maxShown = 7;
+      let start = Math.max(1, currentTasksPage - Math.floor(maxShown/2));
+      let end = Math.min(totalPages, start + maxShown - 1);
+      if (end - start + 1 < maxShown) start = Math.max(1, end - maxShown + 1);
+      for (let p = start; p <= end; p++) {
+        tasksPager.append(mkBtn(String(p), false, () => setTasksPage(p), p === currentTasksPage));
+      }
+      tasksPager.append(next);
+      const info = document.createElement('span');
+      info.className = 'info';
+      info.textContent = `Стр. ${currentTasksPage}/${totalPages} · всего ${totalItems}`;
+      tasksPager.append(info);
+    }
+
+    function setTasksPage(p) {
+      if (p === currentTasksPage) return;
+      currentTasksPage = p;
+      renderTasksPage(true);
     }
 
     // ===== Уведомления (toasts) =====
@@ -831,6 +1118,150 @@
         setTimeout(() => el.remove(), 200);
       }, timeout);
     }
+
+    // ===== Пресеты: UI и API =====
+    let cachedPresets = [];
+
+    async function fetchPresetsFromAPI() {
+      presetsInfo.textContent = 'Загрузка пресетов…';
+      try {
+        const res = await fetch('/api/v1/presets');
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        cachedPresets = Array.isArray(data.presets) ? data.presets : [];
+        renderPresetsDropdown();
+        presetsInfo.textContent = `Всего пресетов: ${cachedPresets.length}`;
+      } catch (e) {
+        presetsInfo.textContent = 'Ошибка загрузки пресетов';
+        showToast('Не удалось загрузить пресеты: ' + (e?.message || e), 'warn');
+      }
+    }
+
+    function renderPresetsDropdown() {
+      if (!presetSelect) return;
+      presetSelect.innerHTML = '';
+      const opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = '(выберите пресет)';
+      presetSelect.appendChild(opt0);
+      for (const p of cachedPresets) {
+        const opt = document.createElement('option');
+        opt.value = p.name; opt.textContent = p.name;
+        presetSelect.appendChild(opt);
+      }
+      const last = localStorage.getItem(LS_PREFIX + 'preset_selected') || '';
+      if (last && cachedPresets.some(p => p.name === last)) {
+        presetSelect.value = last;
+        const pr = cachedPresets.find(p => p.name === last);
+        presetName.value = pr?.name || '';
+        presetDesc.value = pr?.description || '';
+      }
+    }
+
+    function findPresetByName(nm) { return cachedPresets.find(p => p.name === nm); }
+
+    function applyPresetToForm(preset) {
+      if (!preset) return;
+      const s = preset.settings || {};
+      const setVal = (id, val) => {
+        const el = $(id);
+        if (!el) return;
+        if (el.type === 'checkbox') {
+          el.checked = (String(val).toLowerCase() === 'true' || val === true || val === 1);
+        } else {
+          el.value = (val ?? '').toString();
+        }
+      };
+      Object.keys(s).forEach(k => setVal(k, s[k]));
+      showToast(`Пресет «${preset.name}» подставлен в форму`, 'ok', 2000);
+    }
+
+    presetSelect && presetSelect.addEventListener('change', () => {
+      const name = presetSelect.value || '';
+      localStorage.setItem(LS_PREFIX + 'preset_selected', name);
+      const p = findPresetByName(name);
+      presetName.value = p?.name || name;
+      presetDesc.value = p?.description || '';
+    });
+
+    presetApplyBtn && presetApplyBtn.addEventListener('click', () => {
+      const name = (presetSelect.value || presetName.value || '').trim();
+      if (!name) { showToast('Сначала выберите или введите имя пресета', 'warn'); return; }
+      const p = findPresetByName(name);
+      if (!p) { showToast('Пресет не найден в списке', 'warn'); return; }
+      applyPresetToForm(p);
+    });
+
+    presetSaveBtn && presetSaveBtn.addEventListener('click', async () => {
+      const name = (presetName.value || '').trim();
+      if (!name) { showToast('Имя пресета пусто', 'warn'); presetName.focus(); return; }
+      const re = /^[A-Za-z0-9_-]+$/;
+      if (!re.test(name)) { showToast('Недопустимое имя пресета. Разрешены только латиница, цифры, "_" и "-". Без пробелов и спецсимволов.', 'warn'); presetName.focus(); return; }
+      const overwrite = !!(presetOverwrite && presetOverwrite.checked);
+      const exists = cachedPresets.some(p => p.name === name);
+      if (exists && !overwrite) { showToast('Пресет с таким именем уже существует. Включите overwrite для перезаписи.', 'warn'); return; }
+      const desc = (presetDesc.value || '').trim() || null;
+      const payload = { preset: { name, description: desc, settings: collectSettings() }, overwrite };
+      try {
+        const res = await fetch('/api/v1/presets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (res.status === 409) { showToast('Пресет уже существует. Включите overwrite и повторите.', 'warn'); return; }
+        if (!res.ok) throw new Error(await res.text());
+        await fetchPresetsFromAPI();
+        presetSelect.value = name;
+        localStorage.setItem(LS_PREFIX + 'preset_selected', name);
+        showToast('Пресет сохранён', 'ok', 2000);
+      } catch (e) {
+        showToast('Ошибка сохранения: ' + (e?.message || e), 'error');
+      }
+    });
+
+    presetDeleteBtn && presetDeleteBtn.addEventListener('click', async () => {
+      const name = (presetSelect.value || presetName.value || '').trim();
+      if (!name) { showToast('Выберите пресет', 'warn'); return; }
+      if (!confirm(`Удалить пресет «${name}»?`)) return;
+      try {
+        const res = await fetch(`/api/v1/presets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(await res.text());
+        await fetchPresetsFromAPI();
+        presetName.value = '';
+        presetDesc.value = '';
+        presetSelect.value = '';
+        localStorage.removeItem(LS_PREFIX + 'preset_selected');
+        showToast('Пресет удалён', 'ok', 2000);
+      } catch (e) {
+        showToast('Ошибка удаления: ' + (e?.message || e), 'error');
+      }
+    });
+
+    presetExportBtn && presetExportBtn.addEventListener('click', () => {
+      window.open('/api/v1/presets/export', '_blank');
+    });
+
+    presetImportBtn && presetImportBtn.addEventListener('click', async () => {
+      const f = presetImportFile?.files?.[0];
+      if (!f) { showToast('Выберите JSON‑файл для импорта', 'warn'); return; }
+      try {
+        const text = await f.text();
+        let data = JSON.parse(text);
+        if (Array.isArray(data)) data = { presets: data };
+        if (!data || !Array.isArray(data.presets)) throw new Error('Ожидается объект вида { presets: [...] } или массив пресетов');
+        const re = /^[A-Za-z0-9_-]+$/;
+        for (const pr of data.presets) {
+          const nm = (pr?.name || '').trim();
+          if (!nm || !re.test(nm)) { showToast('Импорт отклонён: некорректное имя пресета «' + (pr?.name || '') + '». Разрешены только латиница, цифры, "_" и "-". Без пробелов и спецсимволов.', 'warn'); return; }
+          if (!overwrite && cachedPresets.some(p => p.name === nm)) { showToast('Импорт: пресет «' + nm + '» уже существует. Включите overwrite для перезаписи.', 'warn'); return; }
+        }
+        const body = { presets: data.presets, overwrite };
+        const res = await fetch('/api/v1/presets/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error(await res.text());
+        await fetchPresetsFromAPI();
+        showToast('Импорт завершён', 'ok', 2500);
+      } catch (e) {
+        showToast('Ошибка импорта: ' + (e?.message || e), 'error');
+      }
+    });
+
+    function loadPresets() { fetchPresetsFromAPI(); }
 
     // ===== События =====
     document.getElementById('applySettings').addEventListener('click', applySettingsHandler);
@@ -876,10 +1307,64 @@
     });
 
     // ===== Инициализация =====
+    const TASKS_PER_PAGE = 5;
+    let allTasks = [];
+    let currentTasksPage = 1;
+    let tasksTimer = null;
+    const TASKS_REFRESH_MS = 5000;
+    function startTasksAutoRefresh() {
+      if (tasksTimer) clearInterval(tasksTimer);
+      tasksTimer = setInterval(fetchTasks, TASKS_REFRESH_MS);
+    }
+    function stopTasksAutoRefresh() {
+      if (tasksTimer) { clearInterval(tasksTimer); tasksTimer = null; }
+    }
     loadSettingsFromLS();
     loadSettingsFromAPI(); // первичная инициализация, если LS пуст
+    loadPresets();
     fetchUploads();
     fetchTasks();
+    // startTasksAutoRefresh(); // Отключено: теперь обновление задач только по событиям WebSocket
+    updateModelLoadUI(modelInitPending);
+
+    // Управление UI загрузки модели (индикатор "Загрузка модели…")
+    function updateModelLoadUI(pending) {
+      if (!modelLoadRow || !modelProgress || !modelHint) return;
+      const on = !!pending;
+      show(modelLoadRow, on);
+      if (on) {
+        modelProgress.setAttribute('aria-hidden', 'false');
+        modelProgress.setAttribute('aria-busy', 'true');
+        modelHint.style.display = '';
+      } else {
+        modelProgress.setAttribute('aria-hidden', 'true');
+        modelProgress.setAttribute('aria-busy', 'false');
+        modelHint.style.display = 'none';
+      }
+    }
+
+    // Загрузка задач с сервера и отрисовка текущей страницы
+    async function fetchTasks() {
+      if (tasksInfo) tasksInfo.textContent = 'Загрузка задач…';
+      try {
+        const res = await fetch('/api/v1/tasks');
+        const data = await res.json();
+        allTasks = Array.isArray(data.tasks) ? data.tasks : [];
+        if (tasksInfo) tasksInfo.textContent = `Всего задач: ${allTasks.length}`;
+        renderTasksPage(false);
+      } catch (e) {
+        if (tasksInfo) tasksInfo.textContent = 'Ошибка загрузки задач';
+        showToast('Не удалось загрузить список задач: ' + (e?.message || e), 'warn');
+      }
+    }
+
+    // Дебаунс обновления списка задач по сообщениям WebSocket
+    let tasksRefreshScheduled = false;
+    function scheduleTasksRefresh(delay = 0) {
+      if (tasksRefreshScheduled) return;
+      tasksRefreshScheduled = true;
+      setTimeout(() => { tasksRefreshScheduled = false; fetchTasks(); }, delay);
+    }
   </script>
 </body>
 </html>

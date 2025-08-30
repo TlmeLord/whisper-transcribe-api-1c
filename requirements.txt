@@ -4,4 +4,4 @@ watchfiles
 pydantic==2.7.4
 pydantic-settings==2.3.4
 python-multipart
-faster-whisper
+faster-whisper>=1.1.0,<1.3.0

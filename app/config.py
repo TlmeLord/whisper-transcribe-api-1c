@@ -19,6 +19,14 @@ class Settings(BaseSettings):
     WHISPER_CONDITION_PREV: bool = False
     WHISPER_VAD_MIN_SIL_MS: int = 300
     WHISPER_PROMPT: str | None = None
+    WHISPER_VAD_ENABLED: bool = True
+    WHISPER_LOG_PROGRESS: bool = False
+    WHISPER_WORD_TIMESTAMPS: bool = False
+    WHISPER_MULTILINGUAL: bool = False
+    WHISPER_HOTWORDS: str | None = None
+    WHISPER_MAX_NEW_TOKENS: int | None = None
+    WHISPER_BATCHED: bool = False
+    WHISPER_BATCH_SIZE: int = 8
 
     # Конфиг загрузки из .env (если присутствует) и переменных окружения
     model_config = SettingsConfigDict(

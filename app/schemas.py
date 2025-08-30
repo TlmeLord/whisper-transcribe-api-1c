@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 
 
@@ -14,10 +14,18 @@ class CreateTaskRequest(BaseModel):
     file_path: str = Field(..., description="Абсолютный путь к сохранённому аудиофайлу")
 
 
+class Word(BaseModel):
+    start: float
+    end: float
+    word: str
+    probability: Optional[float] = None
+
+
 class Phrase(BaseModel):
     start: float
     end: float
     text: str
+    words: Optional[List[Word]] = None
 
 
 class TaskResult(BaseModel):
@@ -64,3 +72,28 @@ class TaskDetail(BaseModel):
 
 class UploadResponse(BaseModel):
     stored_path: str
+
+
+class Preset(BaseModel):
+    name: str = Field(..., min_length=1, description="Уникальное имя пресета")
+    description: Optional[str] = Field(default=None, description="Краткое описание")
+    settings: Dict[str, Any] = Field(default_factory=dict, description="Параметры распознавания в виде словаря переменных окружения")
+
+
+class PresetsList(BaseModel):
+    presets: List[Preset]
+
+
+class PresetUpsertRequest(BaseModel):
+    preset: Preset
+    overwrite: bool = False
+
+
+class PresetDeleteResponse(BaseModel):
+    deleted: bool
+    remaining: int
+
+
+class PresetImportRequest(BaseModel):
+    presets: List[Preset]
+    overwrite: bool = False

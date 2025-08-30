@@ -1,6 +1,7 @@
 import os
 import shutil
 import asyncio
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .schemas import CreateTaskRequest, TaskStatusResponse, UploadResponse, TaskStatus, TaskResult, TaskSummary, TaskDetail
+from .schemas import CreateTaskRequest, TaskStatusResponse, UploadResponse, TaskStatus, TaskResult, TaskSummary, TaskDetail, Preset, PresetsList, PresetUpsertRequest, PresetDeleteResponse, PresetImportRequest
 from .queue import queue_manager, Task
 from .whisper_service import transcribe, reset_model
 from .config import get_settings as get_app_settings, reload_settings
@@ -21,6 +22,7 @@ UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", APP_ROOT / "uploads"))
 STATIC_DIR = Path(os.getenv("STATIC_DIR", APP_ROOT / "app" / "static"))
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
+PRESETS_PATH = Path(os.getenv("PRESETS_PATH", APP_ROOT / "presets.json"))
 
 app = FastAPI(title="Whisper Transcribe API", version="1.2.0")
 
@@ -55,8 +57,12 @@ async def process_task(task: Task):
 
 @app.on_event("startup")
 async def on_startup():
-    # Фоновая обработка: транскрибация аудио
     await queue_manager.start_worker(process_task)
+    # Инициализация файла пресетов
+    try:
+        _ensure_presets_file()
+    except Exception:
+        pass
 
 
 @app.on_event("shutdown")
@@ -187,18 +193,40 @@ async def export_result(task_id: str, fmt: str):
     def to_txt(phs):
         return "\n".join((p["text"] if isinstance(p, dict) else p.text).strip() for p in phs)
 
+    def to_word(w):
+        if isinstance(w, dict):
+            return {
+                "start": float(w.get("start", 0.0)),
+                "end": float(w.get("end", 0.0)),
+                "word": str(w.get("word", "")),
+                "probability": w.get("probability", None),
+            }
+        return {
+            "start": float(getattr(w, "start", 0.0)),
+            "end": float(getattr(w, "end", 0.0)),
+            "word": str(getattr(w, "word", "")),
+            "probability": getattr(w, "probability", None),
+        }
+
     def to_dict(p):
         if isinstance(p, dict):
-            return {
+            d = {
                 "start": float(p.get("start", 0.0)),
                 "end": float(p.get("end", 0.0)),
                 "text": str(p.get("text", "")).strip(),
             }
-        return {
+            if p.get("words"):
+                d["words"] = [to_word(w) for w in p.get("words", [])]
+            return d
+        d = {
             "start": float(getattr(p, "start", 0.0)),
             "end": float(getattr(p, "end", 0.0)),
             "text": str(getattr(p, "text", "")).strip(),
         }
+        words_attr = getattr(p, "words", None)
+        if words_attr:
+            d["words"] = [to_word(w) for w in words_attr]
+        return d
 
     fmt = fmt.lower()
     if fmt == "txt":
@@ -344,3 +372,135 @@ async def ws_status(websocket: WebSocket, task_id: str):
             await asyncio.sleep(1.0)
     except WebSocketDisconnect:
         return
+
+
+# ===== Пресеты настроек =====
+
+def _default_presets() -> PresetsList:
+    return PresetsList(presets=[
+        Preset(
+            name="fast_cpu",
+            description="Быстрый на CPU (int8)",
+            settings={
+                "WHISPER_DEVICE": "cpu",
+                "WHISPER_MODEL": "tiny",
+                "WHISPER_COMPUTE_TYPE": "int8",
+                "WHISPER_VAD_ENABLED": True,
+                "WHISPER_LOG_PROGRESS": False,
+                "WHISPER_WORD_TIMESTAMPS": False,
+                "WHISPER_MULTILINGUAL": False,
+                "WHISPER_BATCHED": False,
+                "WHISPER_BATCH_SIZE": 8,
+            },
+        ),
+        Preset(
+            name="accurate_cuda",
+            description="Точный на CUDA (float16)",
+            settings={
+                "WHISPER_DEVICE": "cuda",
+                "WHISPER_MODEL": "large-v3",
+                "WHISPER_COMPUTE_TYPE": "float16",
+                "WHISPER_BEAM": 8,
+                "WHISPER_VAD_ENABLED": True,
+                "WHISPER_WORD_TIMESTAMPS": True,
+                "WHISPER_MULTILINGUAL": True,
+                "WHISPER_BATCHED": False,
+            },
+        ),
+    ])
+
+
+def _ensure_presets_file() -> None:
+    if not PRESETS_PATH.exists():
+        PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        data = _default_presets().model_dump()
+        PRESETS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _load_presets() -> PresetsList:
+    try:
+        if not PRESETS_PATH.exists():
+            return _default_presets()
+        raw = json.loads(PRESETS_PATH.read_text(encoding="utf-8") or "{}")
+        pl = PresetsList.model_validate(raw if raw else {"presets": []})
+        seen = {}
+        for p in pl.presets:
+            if p and p.name:
+                seen[p.name] = p
+        return PresetsList(presets=list(seen.values()))
+    except Exception as e:
+        return _default_presets()
+
+
+def _save_presets(pl: PresetsList) -> None:
+    PRESETS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    PRESETS_PATH.write_text(json.dumps(pl.model_dump(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.get("/api/v1/presets", response_model=PresetsList)
+async def list_presets():
+    return _load_presets()
+
+
+@app.post("/api/v1/presets", response_model=Preset)
+async def upsert_preset(req: PresetUpsertRequest):
+    name = (req.preset.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Имя пресета не может быть пустым")
+    pl = _load_presets()
+    idx = next((i for i, p in enumerate(pl.presets) if p.name == name), None)
+    if idx is not None and not req.overwrite:
+        raise HTTPException(status_code=409, detail="Пресет с таким именем уже существует. Укажите overwrite=true для перезаписи.")
+    if idx is not None:
+        pl.presets[idx] = req.preset
+    else:
+        pl.presets.append(req.preset)
+    _save_presets(pl)
+    return req.preset
+
+
+@app.delete("/api/v1/presets/{name}", response_model=PresetDeleteResponse)
+async def delete_preset(name: str):
+    name = (name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Имя пресета не может быть пустым")
+    pl = _load_presets()
+    idx = next((i for i, p in enumerate(pl.presets) if p.name == name), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Пресет не найден")
+    pl.presets.pop(idx)
+    _save_presets(pl)
+    return PresetDeleteResponse(deleted=True, remaining=len(pl.presets))
+
+
+@app.get("/api/v1/presets/export")
+async def export_presets():
+    pl = _load_presets()
+    content = pl.model_dump()
+    return JSONResponse(content, headers={"Content-Disposition": "attachment; filename=presets.json"}, media_type="application/json; charset=utf-8")
+
+
+@app.post("/api/v1/presets/import")
+async def import_presets(req: PresetImportRequest):
+    pl = _load_presets()
+    name_to_idx = {p.name: i for i, p in enumerate(pl.presets)}
+    imported = 0
+    updated = 0
+    skipped = 0
+    for p in req.presets:
+        nm = (p.name or "").strip()
+        if not nm:
+            skipped += 1
+            continue
+        if nm in name_to_idx:
+            if req.overwrite:
+                pl.presets[name_to_idx[nm]] = p
+                updated += 1
+            else:
+                skipped += 1
+        else:
+            pl.presets.append(p)
+            name_to_idx[nm] = len(pl.presets) - 1
+            imported += 1
+    _save_presets(pl)
+    return {"imported": imported, "updated": updated, "skipped": skipped, "presets": [pr.model_dump() for pr in pl.presets]}
